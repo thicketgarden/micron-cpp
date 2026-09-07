@@ -140,7 +140,11 @@ parsed fields are asserted by unit tests read off nomadnet 1.4.0 instead.
 
 ## Reading the reference
 
-⚠ **Cite the version.** The released nomadnet 1.4.0 and the GitHub default
-branch differ by about 290 lines, so a line number is meaningless on its own.
-Every citation here and in the source names the version it was read in, and the
-parity harness pins `nomadnet` and `urwid==2.6.16` so the oracle is fixed.
+⚠ **Cite the version.** The released nomadnet 1.4.0 is 1,334 lines and carries
+`parse_image`; the GitHub default branch is 1,048 lines and has no images at
+all. A line number means nothing on its own. Every citation here and in the
+source names the version it was read in, and the harness pins
+`nomadnet==1.4.0`.
+
+urwid is **not** pinned. Measured across 2.6.16, 3.0.5 and 4.1.1, the reference
+dump is byte-identical, so constraining it would buy nothing.

@@ -29,7 +29,7 @@ PY="${MICRON_PY:-}"
 if [[ -z "$PY" ]]; then
   command -v uv >/dev/null || { echo "[parity] need uv, or set MICRON_PY to a python with nomadnet"; exit 1; }
   uv venv "$WORK/venv" -q || exit 1
-  uv pip install -q --python "$WORK/venv/bin/python" nomadnet || exit 1
+  uv pip install -q --python "$WORK/venv/bin/python" 'nomadnet==1.4.0' || exit 1
   PY="$WORK/venv/bin/python"
 fi
 "$PY" -c 'import nomadnet' 2>/dev/null || { echo "[parity] $PY has no nomadnet"; exit 1; }

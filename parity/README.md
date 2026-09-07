@@ -13,17 +13,26 @@ bash parity/run_parity.sh          # builds a throwaway venv with uv
 MICRON_PY=/path/to/python run_parity.sh        # or reuse one that has nomadnet
 ```
 
-## The oracle has to be pinned
+## The oracle is `nomadnet==1.4.0`, and urwid is not pinned
 
-**`urwid==2.6.16`.** NomadNet declares `urwid>=2.6.16` and its field and table
-path behaves differently across major versions, so an unpinned oracle makes the
-diff non-deterministic. Both CI jobs pin it.
+**Pin nomadnet.** It is the grammar of record, and the versions differ in ways
+that matter: 1.4.0 is 1,334 lines and carries `parse_image`, while the GitHub
+default branch is 1,048 lines and has no images at all. A floating oracle would
+change what parity means without anyone touching this parser.
 
-**A reference error is a harness fault, not a finding.** If `reference_dump.py`
-reports exceptions attributed to the reference, suspect this file first. It has
-caused them twice: once by asking a returned urwid widget for its truthiness,
-and once by deep-copying a parse state that holds urwid widgets, which raises
-inside urwid's own `Columns`. Both looked exactly like NomadNet being broken.
+**urwid is deliberately not pinned.** Measured across 2.6.16, 3.0.5 and 4.1.1:
+20,752 events, zero reference errors, byte-identical output, same SHA256. It
+does not affect the dump, so pinning it would be a constraint that buys nothing
+and rots.
+
+⚠ **A reference error is a harness fault, not a finding.** If
+`reference_dump.py` reports exceptions attributed to the reference, suspect this
+file first. It has caused them twice, both looking exactly like NomadNet being
+broken against modern urwid: once by asking a returned widget for its
+truthiness, and once by deep-copying a parse state that holds urwid widgets,
+which raises inside urwid's own `Columns`. **The second one is why urwid was
+pinned in the first place, on a diagnosis that was wrong.** Measure before
+blaming a dependency.
 
 ## Two corpora
 

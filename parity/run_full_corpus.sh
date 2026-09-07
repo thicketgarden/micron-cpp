@@ -30,8 +30,7 @@ PY="${MICRON_PY:-}"
 if [[ -z "$PY" ]]; then
   command -v uv >/dev/null || { echo "[corpus] need uv, or MICRON_PY"; exit 1; }
   uv venv "$WORK/venv" -q || exit 1
-  # urwid is pinned because the reference's own field path is version-sensitive.
-  uv pip install -q --python "$WORK/venv/bin/python" nomadnet 'urwid==2.6.16' || exit 1
+  uv pip install -q --python "$WORK/venv/bin/python" 'nomadnet==1.4.0' || exit 1
   PY="$WORK/venv/bin/python"
 fi
 

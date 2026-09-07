@@ -40,9 +40,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      # urwid is pinned: the reference's field and table path is sensitive to
-      # the version, and an unpinned oracle makes the diff non-deterministic.
-      - run: pip install nomadnet 'urwid==2.6.16'
+      # nomadnet is pinned because IT is the oracle. urwid is not: the dump is
+      # byte-identical across 2.6.16, 3.0.5 and 4.1.1, measured.
+      - run: pip install 'nomadnet==1.4.0'
       - name: Diff against the reference parser
         run: MICRON_PY=$(which python) bash parity/run_parity.sh
 
@@ -57,6 +57,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: pip install nomadnet 'urwid==2.6.16'
+      - run: pip install 'nomadnet==1.4.0'
       - name: Measure against the frozen corpus
         run: MICRON_PY=$(which python) bash parity/run_full_corpus.sh
