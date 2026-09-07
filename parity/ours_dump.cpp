@@ -28,12 +28,15 @@ using namespace micron;
 // to prove that `depth` plus `heading` carries everything needed to reproduce
 // the reference's output. Get depth wrong and these stop matching.
 static bool heading_palette(uint8_t depth, uint32_t& fg, uint32_t& bg) {
-    switch (depth) {
-        case 1: fg = 0x222222; bg = 0xbbbbbb; return true;
-        case 2: fg = 0x111111; bg = 0x999999; return true;
-        case 3: fg = 0x000000; bg = 0x777777; return true;
-        default: return false;   // no heading4 upstream; behaviour undefined
-    }
+    // There is no heading4 in the theme. The reference looks up "heading" plus
+    // the depth, finds nothing past three, and leaves its style variable at the
+    // last value that matched, so every deeper heading renders as heading3
+    // rather than as plain text. Verified against nomadnet 1.4.0 at depths 1
+    // through 6.
+    if (depth == 0) return false;
+    if (depth >= 3) { fg = 0x000000; bg = 0x777777; return true; }
+    if (depth == 2) { fg = 0x111111; bg = 0x999999; return true; }
+    fg = 0x222222; bg = 0xbbbbbb; return true;
 }
 
 static std::string color(const Color& c) {
@@ -72,8 +75,10 @@ public:
     // after the line's text. Order within each class is compared; order between
     // them is not.
     std::vector<std::string> links;
-    void onLink(const char* l, size_t ln, const char* t, size_t tn, const Style&) override {
-        links.push_back("LINK|" + std::string(l, ln) + "|" + std::string(t, tn));
+    void onLink(const char* l, size_t ln, const char* t, size_t tn,
+                const char* f, size_t fn, const Style&) override {
+        links.push_back("LINK|" + std::string(l, ln) + "|" + std::string(t, tn)
+                        + "|" + std::string(f, fn));
     }
     // Not compared yet: the reference returns these as urwid widgets rather
     // than through make_part, so reference_dump.py cannot see them. Emitted

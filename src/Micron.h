@@ -119,9 +119,14 @@ public:
     // A run of text in one style. Never spans a line.
     virtual void onText(const char* text, size_t len, const Style& style) = 0;
 
-    // `[label`target] --- label may be empty, in which case target is the label.
+    // `[label`target`fields] --- three parts at most, any of which may be
+    // absent. An empty label falls back to the target. `fields` carries the
+    // pipe-separated form data an interactive page submits with the request,
+    // and is empty for an ordinary link. A body with more than three
+    // backtick-separated parts is not a link at all and never reaches here.
     virtual void onLink(const char* label, size_t label_len,
                         const char* target, size_t target_len,
+                        const char* fields, size_t fields_len,
                         const Style& style) = 0;
 
     // A line starting with '-'. `ch` is the fill character (UTF-8 codepoint).

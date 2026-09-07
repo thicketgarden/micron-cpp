@@ -13,6 +13,26 @@ bash parity/run_parity.sh          # builds a throwaway venv with uv
 MICRON_PY=/path/to/python run_parity.sh        # or reuse one that has nomadnet
 ```
 
+## The oracle has to be pinned
+
+**`urwid==2.6.16`.** NomadNet declares `urwid>=2.6.16` and its field and table
+path behaves differently across major versions, so an unpinned oracle makes the
+diff non-deterministic. Both CI jobs pin it.
+
+**A reference error is a harness fault, not a finding.** If `reference_dump.py`
+reports exceptions attributed to the reference, suspect this file first. It has
+caused them twice: once by asking a returned urwid widget for its truthiness,
+and once by deep-copying a parse state that holds urwid widgets, which raises
+inside urwid's own `Columns`. Both looked exactly like NomadNet being broken.
+
+## Two corpora
+
+`run_parity.sh` is **the gate**, 8 pages, green, blocking.
+
+`run_full_corpus.sh` is **the thermometer**: 82 real pages pinned from
+`thicketgarden/micron-cpp-corpus`, reporting a difference count rather than
+passing or failing. It is promoted to blocking when it reaches zero.
+
 ## How the reference is driven
 
 `parse_line()` is called per line and its internal `make_part()` is

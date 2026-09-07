@@ -40,6 +40,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: pip install nomadnet
+      # urwid is pinned: the reference's field and table path is sensitive to
+      # the version, and an unpinned oracle makes the diff non-deterministic.
+      - run: pip install nomadnet 'urwid==2.6.16'
       - name: Diff against the reference parser
         run: MICRON_PY=$(which python) bash parity/run_parity.sh
+
+  # NON-BLOCKING, and staged deliberately. The full corpus is 82 real pages from
+  # deployed nodes plus NomadNet's own Guide, and the parser does not match it
+  # yet. This job reports the number so it can be watched falling. Turning the
+  # main build red on a known gap teaches people to ignore red.
+  #
+  # PROMOTE THIS TO BLOCKING when it reports zero, and delete this comment.
+  corpus:
+    name: parity against the full corpus (reports a number)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install nomadnet 'urwid==2.6.16'
+      - name: Measure against the frozen corpus
+        run: MICRON_PY=$(which python) bash parity/run_full_corpus.sh

@@ -256,15 +256,41 @@ bool Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
 
             const char* body = line + i + 1;
             size_t body_len = close - i - 1;
-            size_t sep = body_len;
-            for (size_t k = 0; k < body_len; k++) {
-                if (body[k] == '`') { sep = k; break; }
+
+            // The reference splits the body on backticks and reads AT MOST
+            // three parts: label, target, fields (MicronParser.py:771-787).
+            // Four or more parts is not a degraded link, it is discarded
+            // entirely, and the markup is still consumed.
+            size_t tick[3];
+            size_t ticks = 0;
+            for (size_t k = 0; k < body_len && ticks < 3; k++) {
+                if (body[k] == '`') tick[ticks++] = k;
             }
-            if (sep == body_len) {
-                out.onLink(body, body_len, body, body_len, _style);   // target is its own label
-                emitted = true;
+
+            const char* label = body;   size_t label_len = 0;
+            const char* target = body;  size_t target_len = 0;
+            const char* fields = body;  size_t fields_len = 0;
+
+            if (ticks == 0) {                       // `[target]
+                target_len = body_len;
+            } else if (ticks == 1) {                // `[label`target]
+                label_len  = tick[0];
+                target     = body + tick[0] + 1;
+                target_len = body_len - tick[0] - 1;
+            } else if (ticks == 2) {                // `[label`target`fields]
+                label_len  = tick[0];
+                target     = body + tick[0] + 1;
+                target_len = tick[1] - tick[0] - 1;
+                fields     = body + tick[1] + 1;
+                fields_len = body_len - tick[1] - 1;
             } else {
-                out.onLink(body, sep, body + sep + 1, body_len - sep - 1, _style);
+                target_len = 0;                     // four or more: not a link
+            }
+
+            // No target, no link. An empty label falls back to the target.
+            if (target_len > 0) {
+                if (label_len == 0) { label = target; label_len = target_len; }
+                out.onLink(label, label_len, target, target_len, fields, fields_len, _style);
                 emitted = true;
             }
             consumed = (close - i) + 1;

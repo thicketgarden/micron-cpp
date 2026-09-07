@@ -22,7 +22,7 @@ does not, and the differ skips those classes on both sides rather than
 pretending they matched.
 """
 
-import copy, sys, os
+import sys, os
 
 import nomadnet, urwid
 import nomadnet.ui.TextUI as T
@@ -63,8 +63,23 @@ _orig_make_part = M.make_part
 _orig_make_output = M.make_output
 
 
+# Snapshot ONLY the style fields, never the whole state. The parse state holds
+# urwid widgets for radio groups, and deep-copying a Columns raises inside
+# urwid: MonitoredList.append fires _contents_modified before _contents exists.
+# That surfaces as an exception attributed to the reference parser, when the
+# harness caused it.
+_STYLE_KEYS = ("fg_color", "bg_color", "default_fg", "default_bg",
+               "align", "depth", "literal")
+
+
+def _snapshot(state):
+    snap = {k: state.get(k) for k in _STYLE_KEYS}
+    snap["formatting"] = dict(state.get("formatting", {}))
+    return snap
+
+
 def _spy_make_part(state, part):
-    _parts.append((copy.deepcopy(state), part))
+    _parts.append((_snapshot(state), part))
     return _orig_make_part(state, part)
 
 
@@ -77,7 +92,11 @@ def _spy_make_output(state, line, url_delegate, pre_escape=False):
     if isinstance(out, list):
         for entry in out:
             if isinstance(entry, tuple) and len(entry) == 2 and isinstance(entry[0], M.LinkSpec):
-                _links.append((getattr(entry[0], "link_target", "?"), entry[1]))
+                # link_fields is stored split on "|" (MicronParser.py:816-818)
+                # and absent entirely for an ordinary link.
+                lf = getattr(entry[0], "link_fields", None)
+                _links.append((getattr(entry[0], "link_target", "?"), entry[1],
+                               "|".join(lf) if lf else ""))
     return out
 
 
@@ -144,14 +163,18 @@ def dump(path, out):
         # Text first, then links. The reference routes a link's label around
         # make_part, so the two classes cannot be interleaved faithfully. Order
         # WITHIN each class is preserved and compared; order BETWEEN them is not.
-        for target, label in _links:
-            print(f"LINK|{label}|{target}", file=out)
+        for target, label, fields in _links:
+            print(f"LINK|{label}|{target}|{fields}", file=out)
         # EOL means the reference PRODUCED A ROW for this line, which is what
         # decides page height. It is not one-per-input-line: parse_line returns
         # None for a line that renders nothing. Printing it unconditionally
         # would make every line look like a row and would silently invent
         # agreement about layout.
-        if widgets:
+        # `is not None`, never truthiness. parse_line returns None for a line
+        # that renders nothing, but for a field line it returns an urwid widget
+        # whose __bool__ walks its contents and raises. Asking "is this true?"
+        # of a widget breaks the oracle and looks exactly like a reference bug.
+        if widgets is not None:
             print("EOL", file=out)
 
 

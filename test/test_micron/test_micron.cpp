@@ -36,8 +36,10 @@ public:
         if (s.literal) e += "+lit";
         events.push_back(e);
     }
-    void onLink(const char* l, size_t ln, const char* t, size_t tn, const Style&) override {
-        events.push_back("LINK[" + std::string(l, ln) + "->" + std::string(t, tn) + "]");
+    void onLink(const char* l, size_t ln, const char* t, size_t tn,
+                const char* f, size_t fn, const Style&) override {
+        events.push_back("LINK[" + std::string(l, ln) + "->" + std::string(t, tn)
+                         + (fn ? "|" + std::string(f, fn) : "") + "]");
     }
     void onDivider(uint32_t ch, const Style& s) override {
         events.push_back("DIV[" + std::to_string(ch) + "]"
