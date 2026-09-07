@@ -3,6 +3,10 @@
 A streaming parser for **Micron**, the page markup NomadNet renders, in C++ with
 no allocation and no display assumptions.
 
+**Diffed against NomadNet's own parser over 97 real pages, span for span, with
+zero differences.** Not "we believe it matches": the reference is executed and
+its output compared on every push.
+
 ```cpp
 #include "Micron.h"
 
@@ -47,16 +51,30 @@ descriptions get wrong. It's the single source; nothing restates it.
 
 Two test layers, and the difference matters:
 
-- **`test/`, 38 unit tests.** Hand-written expectations. They prove the parser
+- **`test/`, 49 unit tests.** Hand-written expectations. They prove the parser
   matches *our reading* of the grammar.
 - **`parity/`.** Runs **NomadNet's own parser** over a corpus and diffs it
   against ours, span for span. This is what catches a misreading, because a
   hand-written expectation encodes the same misreading it is meant to detect.
 
-**Both block CI. Parity passes on every compared event across 82 real pages.**
-Tables, images and partials are excluded from that diff, because the reference
-lays them out and this parser deliberately does not; their fields are asserted
-by unit tests instead.
+**Both block CI. Parity passes on every compared event across 97 real pages**
+from deployed nodes and community networks, plus NomadNet's own Guide. Tables,
+images and partials are compared against the reference's own parsed values, not
+against a reading of its source.
+
+Two limits of that oracle, both measured rather than assumed:
+
+- **Table layout is not compared**, only the rows going in. The reference
+  converts them to box-drawing text at a fixed width; this parser reports rows
+  and lets the renderer lay them out for the display it actually has.
+- **Image alignment is compared as `ImageWidget`'s glyph**, because that is all
+  the reference exposes: unset and `a=c` both become `|` there, so it cannot
+  tell them apart. The unit tests carry that distinction.
+
+The oracle is pinned to **`nomadnet==1.4.0`**, which is the grammar of record
+and differs from the GitHub default branch by about 290 lines. **urwid is
+deliberately not pinned**: across 2.6.16, 3.0.5 and 4.1.1 the reference dump is
+byte-identical, so constraining it would buy nothing.
 
 Heading colour comes from a theme, and this parser has none. `Style` carries
 `depth` and a `heading` flag instead, and the harness applies NomadNet's own
