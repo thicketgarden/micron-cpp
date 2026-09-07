@@ -39,7 +39,7 @@ heading status, because a heading style can't wrap an editable widget.
 | `` [label`target] `` | link; with no backtick the whole body is both label & target |
 | `<flags\|name`value>` | field. Flags: `^` radio, `?` checkbox, `!` masked, digits set width (default 24) |
 
-## The five details second-hand summaries get wrong
+## The six details second-hand summaries get wrong
 
 Each one is a passing test. They are listed because getting any of them wrong
 produces a parser that looks right on ordinary pages and mangles real ones.
@@ -50,6 +50,9 @@ produces a parser that looks right on ordinary pages and mangles real ones.
 4. **`FT` / `BT` true-colour forms exist**, six hex digits rather than three.
 5. **Checkbox and radio widgets exist**, not just text fields. So do tables
    and anchors.
+6. **A lone backtick resets alignment too**, not just bold, italic, underline
+   and colour. Omitting it strands every following line in whatever alignment
+   the page last set.
 
 ## Deliberate deviations
 
@@ -72,7 +75,7 @@ Two consequences worth stating outright, because both are easy to get wrong:
 
 **Colour digits are consumed, never validated.** `` `F `` takes the next three
 characters whatever they are and `` `FT `` takes six, with no hex check at all
-(`MicronParser.py:617-638`). Consuming the same characters is what keeps the
+(`MicronParser.py:895-918`, nomadnet 1.4.0). Consuming the same characters is what keeps the
 text identical: validating instead leaves `zz` sitting in a sentence where
 NomadNet shows none, which is a difference a reader sees. Fewer than three
 characters follow and nothing happens at all, colour included.
@@ -103,5 +106,21 @@ there and not compared here.
 
 ## Not implemented
 
-Tables and partials, both skipped silently rather than emitted as raw markup.
-A visible `` `t `` would be worse than a missing table.
+**Tables (`` `t ``), partials (`` `{ ``) and images.** Each is skipped rather
+than emitted as raw markup, because a visible `` `t `` is worse than a missing
+table.
+
+These are the only things the full-corpus parity run still disagrees on: **16
+lines out of 21,000 events across 82 real pages**, every one of them a table or
+an image. The reference draws tables with box-drawing characters and renders an
+image placeholder; this parser passes the source rows through as text.
+
+Images arrived in nomadnet 1.4.0 and are handled by `parse_image`, which is
+absent from the grammar this parser was written against.
+
+## Reading the reference
+
+⚠ **Cite the version.** The released nomadnet 1.4.0 and the GitHub default
+branch differ by about 290 lines, so a line number is meaningless on its own.
+Every citation here and in the source names the version it was read in, and the
+parity harness pins `nomadnet` and `urwid==2.6.16` so the oracle is fixed.

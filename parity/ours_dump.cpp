@@ -39,9 +39,19 @@ static bool heading_palette(uint8_t depth, uint32_t& fg, uint32_t& bg) {
     fg = 0x222222; bg = 0xbbbbbb; return true;
 }
 
-static std::string color(const Color& c) {
+// The dark theme's own default foreground, DEFAULT_FG_DARK = "ddd". A page that
+// writes `Fddd explicitly is indistinguishable from one that says nothing in
+// the reference, because its state holds the same string either way. This
+// parser CAN tell them apart, so the harness collapses the distinction the
+// reference cannot represent rather than the other way round.
+static const uint32_t THEME_DEFAULT_FG = 0xdddddd;
+
+// FOREGROUND ONLY. DEFAULT_BG is the literal string "default", not a colour, so
+// an explicit `Bddd background is a real value the reference does report.
+static std::string color(const Color& c, bool is_fg = false) {
     if (c.is_default) return "default";
     if (!c.is_valid) return "invalid";
+    if (is_fg && c.rgb == THEME_DEFAULT_FG) return "default";
     // Always six hex digits. `F00f and `FTff0000 are the same colour spelled
     // two ways, and the reference dumper widens its side to match.
     char buf[8];
@@ -55,20 +65,38 @@ static const char* align_name(Align a) {
 
 class Dumper : public Renderer {
 public:
+    // Adjacent runs in the same style are merged before printing, on both
+    // sides of the diff. A backslash escape ends a run here because the two
+    // halves are not contiguous in the source and this parser copies nothing,
+    // while the reference accumulates into a Python string and emits one run.
+    // The characters and the styles are identical either way, so merging
+    // compares what a renderer actually draws instead of where the parser
+    // happened to breathe. A real difference in text or style still fails.
+    std::string pending_key, pending_text;
+    void flush_text() {
+        if (pending_key.empty() && pending_text.empty()) return;
+        std::printf("TEXT|%s|%s\n", pending_key.c_str(), pending_text.c_str());
+        pending_key.clear(); pending_text.clear();
+    }
     void onText(const char* t, size_t n, const Style& s) override {
         if (n == 0) return;
-        std::string fg = color(s.fg), bg = color(s.bg);
+        std::string fg = color(s.fg, true), bg = color(s.bg);
         uint32_t hfg, hbg;
         if (s.heading && heading_palette(s.depth, hfg, hbg)) {
-            // The page can still override a heading's colour inline, so the
-            // theme only fills in what the page left alone.
-            if (s.fg.is_default) { char b[8]; std::snprintf(b, sizeof b, "%06x", hfg); fg = b; }
-            if (s.bg.is_default) { char b[8]; std::snprintf(b, sizeof b, "%06x", hbg); bg = b; }
+            // The heading style REPLACES the current colours rather than
+            // filling in unset ones. The reference applies it with
+            // style_to_state, which overwrites, so a page that sets a colour
+            // just before a heading does not carry it into the heading.
+            char b[8];
+            std::snprintf(b, sizeof b, "%06x", hfg); fg = b;
+            std::snprintf(b, sizeof b, "%06x", hbg); bg = b;
         }
-        std::printf("TEXT|%c%c%c|%s|%s|%s|%u|%s|%.*s\n",
-                    s.bold ? 'b' : '-', s.italic ? 'i' : '-', s.underline ? 'u' : '-',
-                    fg.c_str(), bg.c_str(), align_name(s.align),
-                    (unsigned)s.depth, s.literal ? "lit" : "-", (int)n, t);
+        char flags[4] = { s.bold ? 'b' : '-', s.italic ? 'i' : '-', s.underline ? 'u' : '-', 0 };
+        std::string key = std::string(flags) + "|" + fg + "|" + bg + "|" + align_name(s.align)
+                        + "|" + std::to_string((unsigned)s.depth) + "|" + (s.literal ? "lit" : "-");
+        if (!pending_text.empty() && key != pending_key) flush_text();
+        pending_key = key;
+        pending_text.append(t, n);
     }
     // The reference routes a link's label around make_part, so links cannot be
     // interleaved with text faithfully. Both sides buffer links and flush them
@@ -77,6 +105,9 @@ public:
     std::vector<std::string> links;
     void onLink(const char* l, size_t ln, const char* t, size_t tn,
                 const char* f, size_t fn, const Style&) override {
+        // No flush. The reference collects links separately and its text parts
+        // merge straight across a link, so flushing here would split a
+        // sentence that contains one. Text is flushed at end of line only.
         links.push_back("LINK|" + std::string(l, ln) + "|" + std::string(t, tn)
                         + "|" + std::string(f, fn));
     }
@@ -90,6 +121,7 @@ public:
     }
     void onAnchor(const char* n, size_t len) override { std::printf("SKIP_ANCHOR|%.*s\n", (int)len, n); }
     void onLineEnd(const Style&) override {
+        flush_text();
         for (const auto& l : links) std::printf("%s\n", l.c_str());
         links.clear();
         std::printf("EOL\n");

@@ -146,6 +146,10 @@ void Parser::parseLine(const char* line, size_t len, Renderer& out) {
             // because they crash upstream's renderer.
             if (len == 2 && (unsigned char)line[1] >= 32) ch = (unsigned char)line[1];
             out.onDivider(ch, _style);
+            // A divider IS a row. The reference returns a widget for it, so it
+            // occupies a line and the page is one taller. Same rule as
+            // everywhere else here: onLineEnd fires when a row was produced.
+            out.onLineEnd(_style);
             return;
         }
     }
@@ -198,8 +202,14 @@ bool Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
         case '*': _style.italic    = !_style.italic;    break;
 
         case '`':               // reset every attribute
+            // Alignment is one of them (MicronParser.py:919-925, nomadnet 1.4.0). Leaving it
+            // out strands a page in whatever alignment it last set, for every
+            // line after the reset, which is why a right-aligned block leaked
+            // into the sections below it. Section depth is NOT reset here; the
+            // reference leaves it alone.
             _style.bold = _style.italic = _style.underline = false;
             _style.fg = Color{}; _style.bg = Color{};
+            _style.align = Align::Left;
             break;
 
         case 'f': _style.fg = Color{}; break;   // fg back to default
@@ -209,7 +219,7 @@ bool Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
         case 'B': {
             // The reference does NOT validate colour digits. It takes the next
             // three characters whatever they are, or six after a T, and sets
-            // the colour to them (MicronParser.py:617-638). Consuming the same
+            // the colour to them (MicronParser.py:895-918, nomadnet 1.4.0). Consuming the same
             // characters is what keeps the TEXT identical, which matters more
             // than the colour does: validating here used to leave "zz" in the
             // sentence where NomadNet showed none.
@@ -258,7 +268,7 @@ bool Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
             size_t body_len = close - i - 1;
 
             // The reference splits the body on backticks and reads AT MOST
-            // three parts: label, target, fields (MicronParser.py:771-787).
+            // three parts: label, target, fields (MicronParser.py:1057-1073, nomadnet 1.4.0).
             // Four or more parts is not a degraded link, it is discarded
             // entirely, and the markup is still consumed.
             size_t tick[3];

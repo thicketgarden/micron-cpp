@@ -195,11 +195,13 @@ void test_depth_persists_then_resets(void) {
 // FIXES-SUMMARY: the divider is a line starting with '-'. The summary had it
 // as `= , which is actually the literal toggle.
 void test_divider_default_char(void) {
-    TEST_ASSERT_EQUAL_STRING("DIV[9472]", run("-").c_str());   // U+2500
+    // A divider occupies a row, so the line ends like any other.
+    // Verified against nomadnet 1.4.0: parse_line returns a widget for "-".
+    TEST_ASSERT_EQUAL_STRING("DIV[9472] EOL", run("-").c_str());   // U+2500
 }
 
 void test_divider_custom_char(void) {
-    TEST_ASSERT_EQUAL_STRING("DIV[61]", run("-=").c_str());    // '='
+    TEST_ASSERT_EQUAL_STRING("DIV[61] EOL", run("-=").c_str());    // '='
 }
 
 // --- literal blocks ---------------------------------------------------------

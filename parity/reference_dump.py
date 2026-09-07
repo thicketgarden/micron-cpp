@@ -26,6 +26,13 @@ import sys, os
 
 import nomadnet, urwid
 import nomadnet.ui.TextUI as T
+import RNS
+
+# RNS logs to stdout, which is where the events go. Silence it, or a stray
+# warning becomes an event line and the diff blames the parser.
+RNS.loglevel = 0
+RNS.compact_log_fmt = True
+RNS.log = lambda *a, **k: None
 
 
 class _Screen:
@@ -52,8 +59,23 @@ nomadnet.NomadNetworkApp.get_shared_instance = staticmethod(lambda: _APP)
 from nomadnet.ui.textui import MicronParser as M  # noqa: E402  (needs the stub first)
 
 class _UrlDelegate:
-    """Presence is what matters; the reference only stores it on a widget."""
+    """A delegate the reference can actually use.
+
+    Presence alone is not enough. parse_image asks it to resolve an image path
+    and reads a glyph table off it, and a missing attribute is caught by the
+    reference and logged as its own error, which pollutes the event stream and
+    looks like a parser failure."""
+
+    # Glyphs the reference substitutes into image placeholders.
+    g = {"image": "[img]", "warning": "[!]", "page": "[p]", "file": "[f]",
+         "link": "[l]", "unknown": "[?]"}
+
     def build_url(self, url, **kwargs): return url
+
+    def resolve_image(self, url, **kwargs):
+        # No image is ever loaded here. Returning None takes the reference's
+        # own "could not load" path, which is deterministic and needs no files.
+        return None
 
 
 _URL_DELEGATE = _UrlDelegate()
@@ -86,13 +108,13 @@ def _spy_make_part(state, part):
 def _spy_make_output(state, line, url_delegate, pre_escape=False):
     """Links do not pass through make_part when a delegate is present.
 
-    MicronParser.py:820 appends (linkspec, link_label) straight to the output
+    MicronParser.py:1100-1106, nomadnet 1.4.0 appends (linkspec, link_label) straight to the output
     list instead, so label and target are paired here and nowhere else."""
     out = _orig_make_output(state, line, url_delegate, pre_escape)
     if isinstance(out, list):
         for entry in out:
             if isinstance(entry, tuple) and len(entry) == 2 and isinstance(entry[0], M.LinkSpec):
-                # link_fields is stored split on "|" (MicronParser.py:816-818)
+                # link_fields is stored split on "|" (MicronParser.py:1104, nomadnet 1.4.0)
                 # and absent entirely for an ordinary link.
                 lf = getattr(entry[0], "link_fields", None)
                 _links.append((getattr(entry[0], "link_target", "?"), entry[1],
@@ -139,7 +161,7 @@ def dump(path, out):
         _links.clear()
         try:
             # A url_delegate must be present or the reference never constructs a
-            # LinkSpec (MicronParser.py:813), and link targets never reach the
+            # LinkSpec (MicronParser.py:1100, nomadnet 1.4.0), and link targets never reach the
             # spy. It is only ever stored on a widget here, so a bare sentinel
             # is enough and nothing about parsing changes.
             widgets = M.parse_line(line, state, _URL_DELEGATE)
@@ -147,19 +169,29 @@ def dump(path, out):
             print(f"REFERENCE_ERROR|{lineno}|{type(e).__name__}: {e}", file=out)
             continue
 
+        # Merge adjacent runs in the same style, symmetrically with the C++
+        # side. See ours_dump.cpp: a backslash escape splits a run there and
+        # not here, because that parser copies nothing and the two halves are
+        # not contiguous in the source. Characters and styles are compared;
+        # where the parser happened to break a run is not.
+        merged = []
         for st, part in _parts:
             if part == "":
                 continue
             f = st["formatting"]
-            flags = ("b" if f["bold"] else "-") + ("i" if f["italic"] else "-") \
-                  + ("u" if f["underline"] else "-")
-            print("TEXT|{}|{}|{}|{}|{}|{}|{}".format(
-                flags,
+            key = "{}|{}|{}|{}|{}|{}".format(
+                ("b" if f["bold"] else "-") + ("i" if f["italic"] else "-")
+                + ("u" if f["underline"] else "-"),
                 _color(st["fg_color"], st["default_fg"]),
                 _color(st["bg_color"], st["default_bg"]),
                 st["align"], st["depth"],
-                "lit" if st["literal"] else "-",
-                part), file=out)
+                "lit" if st["literal"] else "-")
+            if merged and merged[-1][0] == key:
+                merged[-1][1] += part
+            else:
+                merged.append([key, part])
+        for key, text in merged:
+            print(f"TEXT|{key}|{text}", file=out)
         # Text first, then links. The reference routes a link's label around
         # make_part, so the two classes cannot be interleaved faithfully. Order
         # WITHIN each class is preserved and compared; order BETWEEN them is not.
