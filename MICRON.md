@@ -146,5 +146,5 @@ all. A line number means nothing on its own. Every citation here and in the
 source names the version it was read in, and the harness pins
 `nomadnet==1.4.0`.
 
-urwid is **not** pinned. Measured across 2.6.16, 3.0.5 and 4.1.1, the reference
-dump is byte-identical, so constraining it would buy nothing.
+urwid is **not** pinned. Across 2.6.16, 3.0.5 and 4.1.1 the reference dump is
+byte-identical, so constraining it would buy nothing.

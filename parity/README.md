@@ -25,14 +25,11 @@ change what parity means without anyone touching this parser.
 does not affect the dump, so pinning it would be a constraint that buys nothing
 and rots.
 
-⚠ **A reference error is a harness fault, not a finding.** If
-`reference_dump.py` reports exceptions attributed to the reference, suspect this
-file first. It has caused them twice, both looking exactly like NomadNet being
-broken against modern urwid: once by asking a returned widget for its
-truthiness, and once by deep-copying a parse state that holds urwid widgets,
-which raises inside urwid's own `Columns`. **The second one is why urwid was
-pinned in the first place, on a diagnosis that was wrong.** Measure before
-blaming a dependency.
+⚠ **A reference error is a harness fault, not a finding.** When
+`reference_dump.py` reports an exception attributed to the reference, suspect
+this file before suspecting NomadNet or a dependency. The parse state holds
+urwid widgets, so anything that copies it or asks it for a boolean raises from
+inside urwid and reads as the reference being broken. Measure before pinning.
 
 ## Two corpora
 
@@ -84,6 +81,9 @@ of one colour are not being compared as strings.
 
 **A green diff is not the goal; an accurate one is.** If closing a difference
 requires touching the expected output, the change is wrong.
+
+**A dependency is not guilty until measured.** Run the dump across the versions
+in question and compare hashes. A pin added on a hunch outlives the hunch.
 
 ## Not compared yet
 
