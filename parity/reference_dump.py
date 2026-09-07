@@ -159,6 +159,8 @@ def dump(path, out):
     for lineno, line in enumerate(lines, 1):
         _parts.clear()
         _links.clear()
+        was_table = state.get("table_mode", False)
+        was_literal = state.get("literal", False)
         try:
             # A url_delegate must be present or the reference never constructs a
             # LinkSpec (MicronParser.py:1100, nomadnet 1.4.0), and link targets never reach the
@@ -167,6 +169,22 @@ def dump(path, out):
             widgets = M.parse_line(line, state, _URL_DELEGATE)
         except Exception as e:                       # noqa: BLE001
             print(f"REFERENCE_ERROR|{lineno}|{type(e).__name__}: {e}", file=out)
+            continue
+
+        # Tables, images and partials are excluded on both sides. The
+        # reference lays a table out into box-drawing characters at a fixed
+        # width and re-parses the result, and renders an image into a widget.
+        # The C++ parser reports all three as structure and lays out nothing,
+        # by design, so there is no rendered text to compare. Its unit tests
+        # assert the parsed fields instead.
+        now_table = state.get("table_mode", False)
+        if was_table or now_table:
+            # A table's own lines, and the closing `t that emits the whole
+            # rendered table at once.
+            continue
+        # Only outside a literal block. Inside one these are plain text, and
+        # the reference's own dispatch for them sits under `if not literal`.
+        if not was_literal and (line.startswith("`(") or line.startswith("`{")):
             continue
 
         # Merge adjacent runs in the same style, symmetrically with the C++

@@ -60,6 +60,68 @@ size_t parseUInt(const char* s, size_t len, uint8_t& out) {
 
 } // namespace
 
+
+namespace {
+// Both images and partials are a backtick-separated body ending at a closing
+// delimiter. The reference finds that delimiter with rfind, so the LAST one
+// closes it and an earlier one is part of the text.
+size_t bodyEnd(const char* line, size_t len, char close) {
+    for (size_t i = len; i > 0; i--) {
+        if (line[i - 1] == close) return i - 1;
+    }
+    return (size_t)-1;
+}
+} // namespace
+
+void Parser::emitDelimited(const char* line, size_t len, char close,
+                           Renderer& out, bool image) {
+    const size_t end = bodyEnd(line, len, close);
+    if (end == (size_t)-1 || end == 0) return;   // rfind found nothing usable
+
+    // Split on backticks. Six is more parts than either construct defines, and
+    // stopping there keeps this allocation-free.
+    const char* part[6]; size_t plen[6]; size_t n = 0;
+    size_t start = 0;
+    for (size_t i = 0; i <= end && n < 6; i++) {
+        if (i == end || line[i] == '`') {
+            part[n] = line + start; plen[n] = i - start; n++;
+            start = i + 1;
+        }
+    }
+
+    if (image) {
+        // alt is first, url is LAST, everything between is a property.
+        if (n < 2) return;
+        Image img;
+        img.alt = part[0];      img.alt_len = plen[0];
+        img.url = part[n - 1];  img.url_len = plen[n - 1];
+        for (size_t i = 1; i + 1 < n; i++) {
+            const char* pr = part[i]; size_t pl = plen[i];
+            size_t eq = pl;
+            for (size_t k = 0; k < pl; k++) if (pr[k] == '=') { eq = k; break; }
+            if (eq == pl || eq == 0) continue;          // no '=', not a property
+            const char key = pr[0];
+            const char* val = pr + eq + 1; size_t vl = pl - eq - 1;
+            if      (key == 'w') { img.width = val;  img.width_len = vl; }
+            else if (key == 'h') { img.height = val; img.height_len = vl; }
+            else if (key == 'a' && vl > 0) {
+                img.align = val[0] == 'c' ? Align::Center
+                          : val[0] == 'r' ? Align::Right : Align::Left;
+                img.align_set = true;
+            }
+        }
+        if (img.url_len > 0) { out.onImage(img, _style); out.onLineEnd(_style); }
+        return;
+    }
+
+    Partial p;
+    p.url = part[0]; p.url_len = plen[0];
+    if (n >= 2) { p.refresh = part[1]; p.refresh_len = plen[1]; }
+    if (n >= 3) { p.fields  = part[2]; p.fields_len  = plen[2]; }
+    // Four or more parts is not a partial, the same way it is not a link.
+    if (n <= 3 && p.url_len > 0) { out.onPartial(p, _style); out.onLineEnd(_style); }
+}
+
 void Parser::parseLine(const char* line, size_t len, Renderer& out) {
     if (len == 0) return;
 
@@ -112,11 +174,57 @@ void Parser::parseLine(const char* line, size_t len, Renderer& out) {
     }
 
     if (!pre_escape) {
-        // Tables & partials aren't implemented. Skip the whole line rather
-        // than emit its raw markup as text --- a visible "`t" would be worse
-        // than a missing table, and silently dropping keeps the page readable.
-        // TODO(not yet implemented): `t tables, `{ partials.
-        if (len >= 2 && line[0] == '`' && (line[1] == 't' || line[1] == '{')) return;
+        // `t toggles table mode, optionally carrying an alignment character
+        // and a maximum width: `tc80. Checked before the table buffer below,
+        // so a `t inside a table closes it rather than becoming a row.
+        if (len >= 2 && line[0] == '`' && line[1] == 't') {
+            if (_in_table) {
+                _in_table = false;
+                _table = Table{};
+                out.onTableEnd(_style);
+                return;
+            }
+            Table t;
+            size_t k = 2;
+            if (k < len && (line[k] == 'l' || line[k] == 'c' || line[k] == 'r')) {
+                t.align = line[k] == 'c' ? Align::Center
+                        : line[k] == 'r' ? Align::Right : Align::Left;
+                t.align_set = true;
+                k++;
+            }
+            // The reference parses the remainder with int() and ignores it if
+            // that throws, so a partial number is no number at all.
+            uint32_t w = 0;
+            bool digits = k < len;
+            for (size_t d = k; d < len; d++) {
+                if (line[d] < '0' || line[d] > '9') { digits = false; break; }
+                w = w * 10 + (uint32_t)(line[d] - '0');
+                if (w > 65535) { digits = false; break; }
+            }
+            if (digits) { t.max_width = (uint16_t)w; t.max_width_set = true; }
+            _in_table = true;
+            _table = t;
+            out.onTableBegin(_table, _style);
+            return;
+        }
+
+        // Inside a table every line is a row, verbatim.
+        if (_in_table) {
+            out.onTableRow(line, len, _style);
+            return;
+        }
+
+        // `{url`refresh`fields}  --- an in-page partial.
+        if (len >= 2 && line[0] == '`' && line[1] == '{') {
+            emitDelimited(line + 2, len - 2, '}', out, /*image=*/false);
+            return;
+        }
+
+        // `(alt`w=40`a=c`url)  --- an image.
+        if (len >= 2 && line[0] == '`' && line[1] == '(') {
+            emitDelimited(line + 2, len - 2, ')', out, /*image=*/true);
+            return;
+        }
 
         if (first == '<') {
             // Section reset, then re-parse the remainder at depth 0.

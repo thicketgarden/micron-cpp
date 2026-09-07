@@ -96,6 +96,35 @@ static constexpr uint8_t DEFAULT_FIELD_WIDTH = 24;
 
 enum class FieldKind : uint8_t { Text, Checkbox, Radio };
 
+// `(alt`w=40`a=c`/path/image.webp)
+// Every part points into the caller's line buffer and dies with the callback.
+// Dimensions are reported AS WRITTEN, "40" or "50%", never resolved: what a
+// width means depends on the panel, and the parser does not know the panel.
+struct Image {
+    const char* alt = nullptr;    size_t alt_len = 0;
+    const char* url = nullptr;    size_t url_len = 0;
+    const char* width = nullptr;  size_t width_len = 0;
+    const char* height = nullptr; size_t height_len = 0;
+    Align       align = Align::Left;
+    bool        align_set = false;
+};
+
+// `{/page/thing.mu`10`field=value}  --- an in-page region the client refetches.
+// Refresh is in seconds as written; the reference ignores anything under 1.
+struct Partial {
+    const char* url = nullptr;      size_t url_len = 0;
+    const char* refresh = nullptr;  size_t refresh_len = 0;
+    const char* fields = nullptr;   size_t fields_len = 0;
+};
+
+// `t opens a table, `t closes it. `tc80 opens one centred at 80 columns.
+struct Table {
+    Align    align = Align::Left;
+    bool     align_set = false;
+    uint16_t max_width = 0;
+    bool     max_width_set = false;
+};
+
 struct Field {
     const char* name     = nullptr;  // NOT null-terminated; use name_len
     size_t      name_len = 0;
@@ -138,6 +167,22 @@ public:
     // `:name --- a zero-width named position, for in-document links.
     virtual void onAnchor(const char* name, size_t len) = 0;
 
+    // Tables, images and partials. These have DEFAULT NO-OP implementations,
+    // so a renderer that does not care about them need not mention them, and
+    // adding one later does not break existing renderers.
+    //
+    // STRUCTURE, NOT LAYOUT. A table's rows arrive exactly as written and this
+    // parser buffers nothing and measures nothing. The reference lays tables
+    // out into box-drawing characters at a fixed width and re-parses the
+    // result, which is a rendering decision: column widths depend on the panel
+    // and on the font, and neither is knowable here. Split the rows on '|' and
+    // lay them out for the display you actually have.
+    virtual void onTableBegin(const Table&, const Style&) {}
+    virtual void onTableRow(const char* /*row*/, size_t /*len*/, const Style&) {}
+    virtual void onTableEnd(const Style&) {}
+    virtual void onImage(const Image&, const Style&) {}
+    virtual void onPartial(const Partial&, const Style&) {}
+
     // Called once per input line that produced a row, after its content.
     // Not called for comments, literal toggles, or empty results, because the
     // reference renders no row for those either and page height must match.
@@ -150,19 +195,30 @@ public:
     void parseLine(const char* line, size_t len, Renderer& out);
 
     // Reset to document-start state. Call between pages --- style, section
-    // depth & literal mode all persist across lines by design.
-    void reset() { _style = Style{}; }
+    // depth, literal mode & table mode all persist across lines by design.
+    void reset() { _style = Style{}; _in_table = false; _table = Table{}; }
+
+    // True while between an opening and closing `t. Every line fed in this
+    // state is reported through onTableRow untouched.
+    bool inTable() const { return _in_table; }
 
     const Style& style() const { return _style; }
 
 private:
     Style _style;
+    bool  _in_table = false;
+    Table _table;
 
     // Inline markup pass. `pre_escape` means the line began with a backslash,
     // so its first character is literal. Returns true if it emitted anything,
     // which is what decides whether the line becomes a row: a line holding only
     // markup, like a lone colour command, renders nothing in the reference.
     bool emitInline(const char* line, size_t len, Renderer& out, bool pre_escape);
+
+    // Shared body parser for `( images and `{ partials: both are a
+    // backtick-separated body ending at the LAST closing delimiter.
+    void emitDelimited(const char* line, size_t len, char close,
+                       Renderer& out, bool image);
 };
 
 } // namespace micron

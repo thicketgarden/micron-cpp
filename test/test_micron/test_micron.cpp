@@ -13,6 +13,7 @@
 #include <unity.h>
 #include <string>
 #include <vector>
+#include <cstring>
 #include "Micron.h"
 
 using namespace micron;
@@ -56,6 +57,27 @@ public:
         events.push_back("ANCHOR[" + std::string(n, len) + "]");
     }
     void onLineEnd(const Style&) override { events.push_back("EOL"); }
+    void onTableBegin(const Table& t, const Style&) override {
+        events.push_back("TBEGIN[" + std::string(t.align_set ? (t.align == Align::Center ? "c"
+                         : t.align == Align::Right ? "r" : "l") : "-") + ","
+                         + (t.max_width_set ? std::to_string(t.max_width) : "-") + "]");
+    }
+    void onTableRow(const char* r, size_t n, const Style&) override {
+        events.push_back("TROW[" + std::string(r, n) + "]");
+    }
+    void onTableEnd(const Style&) override { events.push_back("TEND"); }
+    void onImage(const Image& i, const Style&) override {
+        events.push_back("IMG[" + std::string(i.alt, i.alt_len) + "|" + std::string(i.url, i.url_len)
+                         + "|w=" + std::string(i.width, i.width_len)
+                         + "|h=" + std::string(i.height, i.height_len)
+                         + "|a=" + (i.align_set ? (i.align == Align::Center ? "c"
+                            : i.align == Align::Right ? "r" : "l") : "-") + "]");
+    }
+    void onPartial(const Partial& p, const Style&) override {
+        events.push_back("PART[" + std::string(p.url, p.url_len) + "|"
+                         + std::string(p.refresh, p.refresh_len) + "|"
+                         + std::string(p.fields, p.fields_len) + "]");
+    }
 
     std::string joined() const {
         std::string r;
@@ -154,6 +176,70 @@ void test_colour_command_too_short_does_nothing(void) {
     // Fewer than three characters after the command and the reference does not
     // consume them, so they stay text and the colour is untouched.
     TEST_ASSERT_EQUAL_STRING("TEXT[00] EOL", run("`F00").c_str());
+}
+
+// --- tables, images, partials ------------------------------------------------
+// Every expectation here was read off nomadnet 1.4.0 rather than reasoned about.
+
+void test_table_opens_buffers_and_closes(void) {
+    Parser p; Recorder r;
+    const char* lines[] = {"`tc80", "| a | b |", "|---|---|", "| 1 | 2 |", "`t"};
+    for (auto l : lines) p.parseLine(l, strlen(l), r);
+    TEST_ASSERT_EQUAL_STRING(
+        "TBEGIN[c,80] TROW[| a | b |] TROW[|---|---|] TROW[| 1 | 2 |] TEND",
+        r.joined().c_str());
+}
+
+void test_table_rows_produce_no_row_of_their_own(void) {
+    // The reference buffers them and emits the whole table at the closing `t,
+    // so no line inside a table ends a line.
+    Parser p; Recorder r;
+    const char* lines[] = {"`t", "| a |", "`t"};
+    for (auto l : lines) p.parseLine(l, strlen(l), r);
+    TEST_ASSERT_EQUAL_STRING("TBEGIN[-,-] TROW[| a |] TEND", r.joined().c_str());
+}
+
+void test_table_bare_toggle_has_no_align_or_width(void) {
+    TEST_ASSERT_EQUAL_STRING("TBEGIN[-,-]", run("`t").c_str());
+}
+
+void test_table_width_without_alignment(void) {
+    TEST_ASSERT_EQUAL_STRING("TBEGIN[-,120]", run("`t120").c_str());
+}
+
+void test_image_alt_properties_and_url(void) {
+    TEST_ASSERT_EQUAL_STRING("IMG[The RNS logo|/media/demo.webp|w=40|h=|a=c] EOL",
+                             run("`(The RNS logo`w=40`a=c`/media/demo.webp)").c_str());
+}
+
+void test_image_without_properties(void) {
+    TEST_ASSERT_EQUAL_STRING("IMG[alt|/x.webp|w=|h=|a=-] EOL", run("`(alt`/x.webp)").c_str());
+}
+
+void test_image_needs_at_least_two_parts(void) {
+    // One part is not an image: the reference requires alt and url.
+    TEST_ASSERT_EQUAL_STRING("", run("`(justtext)").c_str());
+}
+
+void test_partial_url_only(void) {
+    TEST_ASSERT_EQUAL_STRING("PART[/page/x.mu||] EOL", run("`{/page/x.mu}").c_str());
+}
+
+void test_partial_with_refresh_and_fields(void) {
+    TEST_ASSERT_EQUAL_STRING("PART[/page/x.mu|10|a=1|b=2] EOL",
+                             run("`{/page/x.mu`10`a=1|b=2}").c_str());
+}
+
+void test_partial_with_four_parts_is_dropped(void) {
+    // Same rule as a link: more than three parts is not a partial at all.
+    TEST_ASSERT_EQUAL_STRING("", run("`{a`b`c`d}").c_str());
+}
+
+void test_table_markup_inside_a_literal_block_is_text(void) {
+    Parser p; Recorder r;
+    const char* lines[] = {"`=", "`(alt`/x.webp)", "`="};
+    for (auto l : lines) p.parseLine(l, strlen(l), r);
+    TEST_ASSERT_EQUAL_STRING("TEXT[`(alt`/x.webp)]+lit EOL", r.joined().c_str());
 }
 
 // --- links ------------------------------------------------------------------
@@ -272,13 +358,7 @@ void test_alignment(void) {
 
 // --- unimplemented, must degrade quietly ------------------------------------
 
-void test_table_line_is_skipped_not_printed_raw(void) {
-    TEST_ASSERT_EQUAL_STRING("", run("`t").c_str());
-}
 
-void test_partial_line_is_skipped(void) {
-    TEST_ASSERT_EQUAL_STRING("", run("`{something}").c_str());
-}
 
 // --- robustness -------------------------------------------------------------
 
@@ -311,6 +391,17 @@ int main(int, char**) {
     RUN_TEST(test_malformed_colour_consumes_its_digits);
     RUN_TEST(test_malformed_colour_keeps_the_words_after_it);
     RUN_TEST(test_colour_command_too_short_does_nothing);
+    RUN_TEST(test_table_opens_buffers_and_closes);
+    RUN_TEST(test_table_rows_produce_no_row_of_their_own);
+    RUN_TEST(test_table_bare_toggle_has_no_align_or_width);
+    RUN_TEST(test_table_width_without_alignment);
+    RUN_TEST(test_image_alt_properties_and_url);
+    RUN_TEST(test_image_without_properties);
+    RUN_TEST(test_image_needs_at_least_two_parts);
+    RUN_TEST(test_partial_url_only);
+    RUN_TEST(test_partial_with_refresh_and_fields);
+    RUN_TEST(test_partial_with_four_parts_is_dropped);
+    RUN_TEST(test_table_markup_inside_a_literal_block_is_text);
     RUN_TEST(test_link_with_label);
     RUN_TEST(test_link_without_label_uses_target);
     RUN_TEST(test_text_around_link);
@@ -331,8 +422,6 @@ int main(int, char**) {
     RUN_TEST(test_heading_with_field_is_sanitised);
     RUN_TEST(test_anchor);
     RUN_TEST(test_alignment);
-    RUN_TEST(test_table_line_is_skipped_not_printed_raw);
-    RUN_TEST(test_partial_line_is_skipped);
     RUN_TEST(test_unterminated_link_does_not_run_off_the_end);
     RUN_TEST(test_unterminated_field_does_not_crash);
     RUN_TEST(test_trailing_backtick);

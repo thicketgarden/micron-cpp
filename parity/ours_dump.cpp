@@ -120,7 +120,40 @@ public:
         std::printf("SKIP_FIELD|%.*s\n", (int)f.name_len, f.name ? f.name : "");
     }
     void onAnchor(const char* n, size_t len) override { std::printf("SKIP_ANCHOR|%.*s\n", (int)len, n); }
+
+    // Tables, images and partials are reported as structure and never laid
+    // out, so their rendered text cannot be diffed against a reference that
+    // does lay them out. They are printed for eyeballing and excluded from the
+    // comparison; the unit tests assert their fields instead.
+    void onTableBegin(const Table& t, const Style&) override {
+        in_table = true;
+        std::printf("SKIP_TABLE_BEGIN|%s|%u\n",
+                    t.align_set ? align_name(t.align) : "-",
+                    t.max_width_set ? (unsigned)t.max_width : 0u);
+    }
+    void onTableRow(const char* r, size_t n, const Style&) override {
+        std::printf("SKIP_TABLE_ROW|%.*s\n", (int)n, r);
+    }
+    void onTableEnd(const Style&) override { in_table = false; std::printf("SKIP_TABLE_END\n"); }
+    void onImage(const Image& i, const Style&) override {
+        in_media = true;
+        std::printf("SKIP_IMAGE|%.*s|%.*s|%.*s|%.*s|%s\n",
+                    (int)i.alt_len, i.alt ? i.alt : "", (int)i.url_len, i.url ? i.url : "",
+                    (int)i.width_len, i.width ? i.width : "", (int)i.height_len, i.height ? i.height : "",
+                    i.align_set ? align_name(i.align) : "-");
+    }
+    void onPartial(const Partial& p, const Style&) override {
+        in_media = true;
+        std::printf("SKIP_PARTIAL|%.*s|%.*s|%.*s\n",
+                    (int)p.url_len, p.url ? p.url : "", (int)p.refresh_len, p.refresh ? p.refresh : "",
+                    (int)p.fields_len, p.fields ? p.fields : "");
+    }
+    bool in_table = false, in_media = false;
     void onLineEnd(const Style&) override {
+        // An image or partial row is excluded from the diff along with its
+        // content, because the reference renders a widget we do not produce.
+        if (in_media) { in_media = false; pending_key.clear(); pending_text.clear(); links.clear();
+                        std::printf("SKIP_MEDIA_EOL\n"); return; }
         flush_text();
         for (const auto& l : links) std::printf("%s\n", l.c_str());
         links.clear();

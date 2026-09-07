@@ -7,10 +7,13 @@
 #
 #   bash parity/run_full_corpus.sh
 #
-# NOT A GATE. run_parity.sh is the gate and it must stay green. This one is a
-# thermometer: the number falls as the parser gets closer to the reference, and
-# it is promoted to blocking when it reaches zero. A job that is always red
-# teaches people to ignore red.
+# A GATE. Every compared event across 82 real pages matches the reference, so a
+# difference here is a regression rather than a known gap.
+#
+# Tables, images and partials are excluded on both sides: the reference lays
+# them out and this parser reports them as structure. Their fields are covered
+# by unit tests instead. Excluding them is a stated deviation, not a way of
+# getting the number down.
 #
 # The corpus is pinned by SHA, like every other dependency. It is a separate
 # repository because part of it is GPL-3.0 and this library is Apache-2.0; see
@@ -55,6 +58,7 @@ echo "[corpus] $PAGES pages · $(wc -l < "$WORK/ref.events" | tr -d ' ') referen
 echo "[corpus] reference errors: $ERRORS  (must be 0; anything else is a harness fault, not a finding)"
 echo "[corpus] DIFFERING LINES: $DIFFS"
 if [[ "$DIFFS" -eq 0 && "$ERRORS" -eq 0 ]]; then
-  echo "[corpus] full corpus is green. Promote this job to blocking and retire the note in ci.yml."
+  echo "[corpus] green"
+  exit 0
 fi
-exit 0
+exit 1

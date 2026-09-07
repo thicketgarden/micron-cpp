@@ -46,16 +46,13 @@ jobs:
       - name: Diff against the reference parser
         run: MICRON_PY=$(which python) bash parity/run_parity.sh
 
-  # NON-BLOCKING, and staged deliberately. The full corpus is 82 real pages from
-  # deployed nodes plus NomadNet's own Guide, and the parser does not match it
-  # yet. This job reports the number so it can be watched falling. Turning the
-  # main build red on a known gap teaches people to ignore red.
-  #
-  # PROMOTE THIS TO BLOCKING when it reports zero, and delete this comment.
+  # BLOCKING. 82 real pages from deployed nodes plus NomadNet's own Guide, and
+  # every compared event matches. Tables, images and partials are excluded on
+  # both sides, because the reference lays them out and this parser reports them
+  # as structure; their fields are covered by unit tests.
   corpus:
-    name: parity against the full corpus (reports a number)
+    name: parity against the full corpus
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

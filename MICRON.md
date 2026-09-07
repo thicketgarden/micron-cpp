@@ -104,19 +104,39 @@ wrong and parity goes red.
 There is no `heading4` upstream, so behaviour past depth three is undefined
 there and not compared here.
 
-## Not implemented
+## Tables, images and partials: structure, never layout
 
-**Tables (`` `t ``), partials (`` `{ ``) and images.** Each is skipped rather
-than emitted as raw markup, because a visible `` `t `` is worse than a missing
-table.
+All three are parsed and reported. None is laid out.
 
-These are the only things the full-corpus parity run still disagrees on: **16
-lines out of 21,000 events across 82 real pages**, every one of them a table or
-an image. The reference draws tables with box-drawing characters and renders an
-image placeholder; this parser passes the source rows through as text.
+**Tables.** `` `t `` opens, `` `t `` closes, and `` `tc80 `` opens one centred at
+80 columns. Every line between arrives through `onTableRow` exactly as written.
+The parser buffers nothing and measures nothing.
 
-Images arrived in nomadnet 1.4.0 and are handled by `parse_image`, which is
-absent from the grammar this parser was written against.
+The reference does lay them out: it converts the rows to box-drawing characters
+at a fixed width and re-parses the result. That is a rendering decision made for
+a terminal. Column widths depend on the panel and the font, and a 400x240 1-bit
+display is not a 100-column terminal, so the rows are handed over intact and the
+renderer splits on `|` and lays out for the display it has.
+
+**Images.** `` `(alt`w=40`a=c`/path.webp) ``. First part is the alt text, last is
+the URL, the parts between are properties: `w`, `h`, `a`. Dimensions are
+reported **as written**, `40` or `50%`, because what a width means depends on a
+panel the parser cannot see. Fewer than two parts is not an image.
+
+**Partials.** `` `{/page/x.mu`10`a=1|b=2} ``: URL, refresh in seconds, then
+pipe-separated fields. Four or more parts is not a partial, the same rule links
+follow.
+
+⚠ **Refresh is reported as written, and the reference ignores anything below
+1 second.** That rule is the renderer's to apply; parsing a float on a
+microcontroller to enforce it here would be the wrong place.
+
+### What this means for parity
+
+The full-corpus run excludes these three constructs on both sides, because
+there is no rendered text to compare against a reference that renders. Their
+parsed fields are asserted by unit tests read off nomadnet 1.4.0 instead.
+**Everything else matches: 82 real pages, zero differences.**
 
 ## Reading the reference
 

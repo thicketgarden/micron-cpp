@@ -32,13 +32,11 @@ is your business.**
 
 ## What it does not do
 
-**It reports colour, it does not resolve it.** A page can ask for `#ff0000`;
-whether that means anything on a 1-bit panel is the renderer's problem, and the
-parser refuses to guess.
-
-Tables (`` `t ``) and partials (`` `{ ``) are not implemented. Each is a no-op
-that leaves the rest of the line intact, because a visible `` `t `` is worse
-than a missing table.
+**It reports, it does not resolve.** A page can ask for `#ff0000`; whether that
+means anything on a 1-bit panel is the renderer's problem. Tables arrive as
+rows, images as an alt text and a URL with dimensions as written, headings as a
+depth. Nothing is measured, coloured in, or laid out, because the panel is not
+visible from here.
 
 ## Correctness
 
@@ -53,7 +51,10 @@ Two test layers, and the difference matters:
   against ours, span for span. This is what catches a misreading, because a
   hand-written expectation encodes the same misreading it is meant to detect.
 
-**Both block CI, and parity passes on every compared event.**
+**Both block CI. Parity passes on every compared event across 82 real pages.**
+Tables, images and partials are excluded from that diff, because the reference
+lays them out and this parser deliberately does not; their fields are asserted
+by unit tests instead.
 
 Heading colour comes from a theme, and this parser has none. `Style` carries
 `depth` and a `heading` flag instead, and the harness applies NomadNet's own
