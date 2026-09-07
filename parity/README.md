@@ -74,11 +74,19 @@ width and rows, image alt text, URL, dimensions and alignment, and partial URL,
 refresh and fields. All against the reference's own parsed values, taken off the
 widgets and state it produces rather than re-derived.
 
-**Not compared:** dividers, fields and anchors. The reference returns those as
-urwid widgets from `parse_line` rather than through `make_part`, so the dumper
-cannot see them. Our side emits them with a `SKIP_` prefix and the differ drops
-those lines on both sides, so the gap is visible in the dump instead of quietly
-passing.
+Dividers and fields are compared too, off the widgets the reference builds:
+`Divider.div_char`, and a field's `field_name`, `field_value`, label, `_mask`
+and checked `state`.
+
+⚠ **They were not, and that is how three parser bugs stayed green.** Skipping a
+construct on both sides makes parity pass over it BY CONSTRUCTION, and the
+corpus already held every case: four pages with a pre-checked box, five with a
+masked field, seven with a multi-byte divider fill. None of it was ever diffed.
+Adding corpus pages would not have caught them; only comparing them did.
+
+**Still not compared:** anchors, and a field's width. An anchor is zero-width
+with nothing to read back, and the reference carries field width as a column
+width rather than on the field.
 
 **Table layout is not compared either**, only the rows going in. The reference
 converts them to box-drawing text at a fixed width; this parser reports the rows

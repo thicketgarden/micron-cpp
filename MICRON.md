@@ -133,6 +133,12 @@ microcontroller to enforce it here would be the wrong place.
 
 ### What this means for parity
 
+⚠ **A construct excluded from the diff is a construct with no parity claim.**
+Fields and dividers were skipped on both sides, so parity passed over them by
+construction while three parser bugs sat in them. Excluding something is a
+decision that has to be revisited, not a permanent shape.
+
+
 The full-corpus run compares all three against the reference's **own parsed
 values**, lifted from the widgets and state it produces: table alignment, width
 and rows; image alt text, URL and dimensions; partial URL, refresh and fields.

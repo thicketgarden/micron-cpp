@@ -111,6 +111,7 @@ public:
     // after the line's text. Order within each class is compared; order between
     // them is not.
     std::vector<std::string> links;
+    std::vector<std::string> fields;
     void onLink(const char* l, size_t ln, const char* t, size_t tn,
                 const char* f, size_t fn, const Style&) override {
         // No flush. The reference collects links separately and its text parts
@@ -123,9 +124,35 @@ public:
     // than through make_part, so reference_dump.py cannot see them. Emitted
     // with a SKIP prefix so the differ drops them on this side too, and so the
     // gap is visible in the dump rather than silent.
-    void onDivider(uint32_t ch, const Style&) override { std::printf("SKIP_DIV|%u\n", ch); }
+    void onDivider(uint32_t ch, const Style&) override {
+        // The fill character, as UTF-8, so it compares against the reference's
+        // div_char rather than against nothing.
+        char u[5]; int n = 0;
+        if (ch < 0x80) u[n++] = (char)ch;
+        else if (ch < 0x800) { u[n++] = (char)(0xC0|(ch>>6)); u[n++] = (char)(0x80|(ch&0x3F)); }
+        else { u[n++] = (char)(0xE0|(ch>>12)); u[n++] = (char)(0x80|((ch>>6)&0x3F));
+               u[n++] = (char)(0x80|(ch&0x3F)); }
+        u[n] = 0;
+        std::printf("DIVIDER|%s\n", u);
+    }
     void onField(const Field& f, const Style&) override {
-        std::printf("SKIP_FIELD|%.*s\n", (int)f.name_len, f.name ? f.name : "");
+        // Name, value, label, mask and checked state: everything the reference
+        // exposes on its own widget. Width is NOT compared, because the
+        // reference carries it as a column width rather than on the field.
+        const char* kind = f.kind == FieldKind::Checkbox ? "check"
+                         : f.kind == FieldKind::Radio    ? "radio" : "text";
+        char buf[512];
+        std::snprintf(buf, sizeof buf, "FIELD|%s|%.*s|%.*s|%.*s|%s|%s", kind,
+                    (int)f.name_len, f.name ? f.name : "",
+                    (int)f.value_len, f.value ? f.value : "",
+                    (int)f.label_len, f.label ? f.label : "",
+                    f.masked ? "masked" : "-",
+                    f.prechecked ? "checked" : "-");
+        // A SEPARATE buffer from the links, flushed after them, because that
+        // is the order the reference emits: all links, then all fields. Order
+        // within each class is compared; interleaving between classes is not
+        // recoverable from a widget tree.
+        fields.push_back(buf);
     }
     void onAnchor(const char* n, size_t len) override { std::printf("SKIP_ANCHOR|%.*s\n", (int)len, n); }
 
@@ -185,6 +212,8 @@ public:
         flush_text();
         for (const auto& l : links) std::printf("%s\n", l.c_str());
         links.clear();
+        for (const auto& f : fields) std::printf("%s\n", f.c_str());
+        fields.clear();
         std::printf("EOL\n");
     }
 };

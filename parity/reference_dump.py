@@ -148,6 +148,74 @@ def _unwrap(widgets):
     return getattr(w, "_contained_image", w)
 
 
+def _walk(widgets, depth=0):
+    """Every widget in a returned tree. The reference wraps fields in
+    FormColumns and pads dividers, so the thing that carries the data is
+    usually not the top-level widget."""
+    seen = set()
+    for w in (widgets or []):
+        # A QUEUE, not a stack. A stack visits children in reverse, so fields
+        # came out right-to-left and every multi-field line differed on order
+        # alone.
+        from collections import deque
+        stack = deque([(w, 0)])
+        while stack:
+            o, d = stack.popleft()
+            # The same widget is reachable through both contents and
+            # original_widget, so identity has to gate it or every field is
+            # reported twice.
+            if d > 5 or id(o) in seen:
+                continue
+            seen.add(id(o))
+            yield o
+            for attr in ("contents", "original_widget", "_original_widget"):
+                v = getattr(o, attr, None)
+                if v is None:
+                    continue
+                if isinstance(v, list):
+                    for e in v:
+                        stack.append((e[0] if isinstance(e, tuple) else e, d + 1))
+                elif v is not o:
+                    stack.append((v, d + 1))
+
+
+def _emit_divider(widgets, out):
+    for o in _walk(widgets):
+        if type(o).__name__ == "Divider":
+            print(f"DIVIDER|{getattr(o, 'div_char', '')}", file=out)
+            return
+
+
+def _emit_fields(widgets, out):
+    """Fields as the reference actually built them.
+
+    This is the comparison that was missing. Fields and dividers were skipped on
+    both sides because the reference returns them as widgets rather than through
+    make_part, so parity was green over them BY CONSTRUCTION: the corpus already
+    contained masked fields, pre-checked boxes and multi-byte dividers, and none
+    of it was ever diffed."""
+    for o in _walk(widgets):
+        n = type(o).__name__
+        if not hasattr(o, "field_name"):
+            continue
+        name = getattr(o, "field_name", "") or ""
+        if n in ("CheckBox", "RadioButton"):
+            kind = "check" if n == "CheckBox" else "radio"
+            try: label = o.get_label()
+            except Exception: label = ""
+            print("FIELD|{}|{}|{}|{}|-|{}".format(
+                kind, name, getattr(o, "field_value", "") or "", label,
+                "checked" if o.get_state() else "-"), file=out)
+        else:
+            mask = getattr(o, "_mask", None)
+            # The real text, not the masked display: masking is a display
+            # property and the value underneath is what the parser reports.
+            try: val = o.get_edit_text()
+            except Exception: val = ""
+            print("FIELD|text|{}|{}||{}|-".format(
+                name, val or "", "masked" if mask else "-"), file=out)
+
+
 def _emit_image(widgets, out):
     w = _unwrap(widgets)
     if w is None or not hasattr(w, "image_url"):
@@ -253,6 +321,18 @@ def dump(path, out):
         if not was_literal and line.startswith("`("):
             _emit_image(widgets, out)
             continue
+        if not was_literal and line.startswith("-"):
+            _emit_divider(widgets, out)
+            # A divider IS a row, and the reference returns a widget for it, so
+            # the row marker still belongs here. Skipping it made every divider
+            # line differ by one EOL.
+            if widgets is not None:
+                print("EOL", file=out)
+            continue
+        # Fields are emitted AFTER the line's text, alongside the links, for
+        # the same reason: they come off a widget tree while text comes through
+        # make_part, so where they interleave is not recoverable.
+        pending_fields = (not was_literal and "`<" in line)
         if not was_literal and line.startswith("`{"):
             _emit_partial(widgets, out)
             continue
@@ -285,6 +365,8 @@ def dump(path, out):
         # WITHIN each class is preserved and compared; order BETWEEN them is not.
         for target, label, fields in _links:
             print(f"LINK|{label}|{target}|{fields}", file=out)
+        if pending_fields:
+            _emit_fields(widgets, out)
         # EOL means the reference PRODUCED A ROW for this line, which is what
         # decides page height. It is not one-per-input-line: parse_line returns
         # None for a line that renders nothing. Printing it unconditionally
