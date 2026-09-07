@@ -22,7 +22,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 CORPUS_REPO="https://github.com/thicketgarden/micron-cpp-corpus.git"
-CORPUS_SHA="df256e7c41991961cdf9c340138634e8a9dc28fd"
+CORPUS_SHA="55291fd68bfa2b4a7585dea17a840046e68dfc76"
 WORK="${TMPDIR:-/tmp}/micron-corpus.$$"
 mkdir -p "$WORK"; trap 'rm -rf "$WORK"' EXIT
 
