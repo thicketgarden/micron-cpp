@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Blocking. The parser's own behaviour, asserted against hand-written cases.
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install --upgrade platformio
+      - run: pio test -e native
+
+  # Compiling with nothing but a compiler is the dependency claim, so it is
+  # tested rather than asserted. If this job ever needs a framework, a board or
+  # another library, the parser has grown a dependency it should not have.
+  freestanding:
+    name: builds with a bare compiler
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the parser alone
+        run: c++ -std=c++17 -Wall -Wextra -Wpedantic -c src/Micron.cpp -o /dev/null
+      - name: Compile the parity dumper against it
+        run: c++ -std=c++17 -Wall -Wextra -I src parity/ours_dump.cpp src/Micron.cpp -o /dev/null
+
+  # NON-BLOCKING BY DESIGN. Red here means a documented deviation in MICRON.md,
+  # not a broken build. Read the diff; never edit the expected output to close
+  # it. Run before every release.
+  parity:
+    name: parity against NomadNet (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install nomadnet
+      - name: Diff against the reference parser
+        run: MICRON_PY=$(which python) bash parity/run_parity.sh
