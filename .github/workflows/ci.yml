@@ -29,13 +29,13 @@ jobs:
       - name: Compile the parity dumper against it
         run: c++ -std=c++17 -Wall -Wextra -I src parity/ours_dump.cpp src/Micron.cpp -o /dev/null
 
-  # NON-BLOCKING BY DESIGN. Red here means a documented deviation in MICRON.md,
-  # not a broken build. Read the diff; never edit the expected output to close
-  # it. Run before every release.
+  # BLOCKING. It passes on every compared event, so a divergence is a real
+  # regression and not a known disagreement. Never edit the expected output to
+  # close a diff: fix the parser, or document a deviation in MICRON.md and
+  # exclude it deliberately.
   parity:
-    name: parity against NomadNet (advisory)
+    name: parity against NomadNet
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -1,6 +1,6 @@
 {
   "name": "micron-cpp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Streaming parser for Micron, NomadNet's page markup. Allocation-free, display-agnostic, validated against the reference parser.",
   "keywords": ["micron", "nomadnet", "reticulum", "markup", "parser", "embedded"],
   "license": "Apache-2.0",

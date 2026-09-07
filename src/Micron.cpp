@@ -131,10 +131,12 @@ void Parser::parseLine(const char* line, size_t len, Renderer& out) {
             _style.depth = (uint8_t)i;
             line += i; len -= i;
             if (len == 0) return;
-            // Headings carry the section style; the renderer decides what a
-            // depth-N heading looks like. We don't fake bold here.
-            emitInline(line, len, out, false);
-            out.onLineEnd(_style);
+            // The heading flag is set for this line only. Content beneath a
+            // heading carries the same depth and is not a heading, and the
+            // reference styles only the heading itself.
+            _style.heading = true;
+            if (emitInline(line, len, out, false)) out.onLineEnd(_style);
+            _style.heading = false;
             return;
         }
 
@@ -148,17 +150,17 @@ void Parser::parseLine(const char* line, size_t len, Renderer& out) {
         }
     }
 
-    emitInline(line, len, out, pre_escape);
-    out.onLineEnd(_style);
+    if (emitInline(line, len, out, pre_escape)) out.onLineEnd(_style);
 }
 
-void Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_escape) {
+bool Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_escape) {
     size_t run_start = 0;     // start of the current unstyled run
     size_t i = 0;
     bool escape = pre_escape;
 
+    bool emitted = false;
     auto flush = [&](size_t end) {
-        if (end > run_start) out.onText(line + run_start, end - run_start, _style);
+        if (end > run_start) { out.onText(line + run_start, end - run_start, _style); emitted = true; }
     };
 
     while (i < len) {
@@ -205,18 +207,32 @@ void Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
 
         case 'F':
         case 'B': {
+            // The reference does NOT validate colour digits. It takes the next
+            // three characters whatever they are, or six after a T, and sets
+            // the colour to them (MicronParser.py:617-638). Consuming the same
+            // characters is what keeps the TEXT identical, which matters more
+            // than the colour does: validating here used to leave "zz" in the
+            // sentence where NomadNet showed none.
+            //
+            // Length is the only gate, and it is the reference's: three more
+            // characters must exist or nothing at all happens.
             Color parsed;
-            bool ok = false;
-            if (i + 1 < len && line[i + 1] == 'T') {
-                ok = parseLongColor(line + i + 2, len - i - 2, parsed);
-                if (ok) consumed = 8;           // 'F' + 'T' + 6 hex
+            if (i + 1 < len && line[i + 1] == 'T' && i + 7 < len) {
+                if (!parseLongColor(line + i + 2, len - i - 2, parsed)) {
+                    parsed.is_default = false;
+                    parsed.is_valid = false;
+                }
+                consumed = 8;                   // 'F' + 'T' + 6 characters
+            } else if (i + 3 < len) {
+                if (!parseShortColor(line + i + 1, len - i - 1, parsed)) {
+                    parsed.is_default = false;
+                    parsed.is_valid = false;
+                }
+                consumed = 4;                   // 'F' + 3 characters
             } else {
-                ok = parseShortColor(line + i + 1, len - i - 1, parsed);
-                if (ok) consumed = 4;           // 'F' + 3 nibbles
+                break;                          // too short: reference does nothing
             }
-            // A malformed colour consumes only the command char, matching
-            // upstream, which doesn't apply it.
-            if (ok) { if (cmd == 'F') _style.fg = parsed; else _style.bg = parsed; }
+            if (cmd == 'F') _style.fg = parsed; else _style.bg = parsed;
             break;
         }
 
@@ -246,8 +262,10 @@ void Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
             }
             if (sep == body_len) {
                 out.onLink(body, body_len, body, body_len, _style);   // target is its own label
+                emitted = true;
             } else {
                 out.onLink(body, sep, body + sep + 1, body_len - sep - 1, _style);
+                emitted = true;
             }
             consumed = (close - i) + 1;
             break;
@@ -287,6 +305,7 @@ void Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
             f.value_len = close - tick - 1;
 
             out.onField(f, _style);
+            emitted = true;
             consumed = (close - i) + 1;
             break;
         }
@@ -302,6 +321,7 @@ void Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
     }
 
     flush(i);
+    return emitted;
 }
 
 } // namespace micron

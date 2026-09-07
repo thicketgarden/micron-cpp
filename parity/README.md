@@ -33,39 +33,32 @@ c++ -std=c++17 -I src parity/ours_dump.cpp src/Micron.cpp
 If that ever needs more than a C++17 compiler and the parser, the parser has
 grown a dependency it shouldn't have.
 
-## Status: red on two documented deviations, and nothing else
+## Status: green, and blocking
 
-**8 pages, 94 reference events, 10 differing lines, two classes.** Both are
-written up in `MICRON.md` as measured deviations: headings carry theme colour in
-the reference and none here, and malformed colour digits are consumed by the
-reference and rejected here.
-
-The unit tests are the blocking CI job. This one runs as its own job and is
-**allowed to be red**, because its red is a documented disagreement rather than
-an unknown. It must be **run before every release** and the diff read, because a
-harness that only ever fails the same way is a harness nobody looks at.
+**8 pages, 98 reference events, zero differences.** It is a blocking CI job. A
+divergence is a broken build, not a footnote.
 
 **Never edit the expected output to close a diff.** The reference is the grammar
-of record. A difference is resolved by changing this parser or by writing the
-deviation into `MICRON.md`, and by nothing else.
+of record. A difference is resolved by changing this parser, or by writing a
+deviation into `MICRON.md` and excluding it deliberately, and by nothing else.
+Reaching green here meant changing the parser twice and correcting a unit test
+the reference disproved.
 
-### What it caught while being built
+### What it caught
 
-Three findings, and one of them was a change to this parser that had to be
-reverted:
-
-- **A literal toggle renders no row.** An early version of the dumper printed
-  `EOL` once per input line rather than once per row the reference actually
-  produced. That made comments, blank lines and `` `= `` toggles all look like
-  rows, and this parser was changed to match. Gating `EOL` on `parse_line`
-  returning a widget showed the opposite: the reference renders nothing there
-  and the original behaviour was already right. The change was reverted.
-  **A harness that is wrong in the direction of agreement is worse than no
-  harness**, because it launders its own artifacts into the code under test.
+- **Colour digits are consumed, not validated.** The parser rejected non-hex and
+  left the characters in the text; the reference consumes three characters
+  whatever they are. Readers saw different words. Fixed, and a unit test that
+  asserted the old behaviour was corrected, because it encoded our misreading.
+- **A literal toggle renders no row.** An early dumper printed a row marker once
+  per input line rather than once per row the reference produced, which made
+  comments, blank lines and `` `= `` toggles all look like rows, and the parser
+  was edited to match. Gating the marker on `parse_line` returning a widget
+  showed the reverse and the edit was reverted. **A harness that is wrong in the
+  direction of agreement is worse than no harness**, because it launders its own
+  artifacts into the code under test.
 - **A file ending in a newline is not a file with a trailing blank line.**
-- **`` `F00f `` and `` `FTff0000 `` are one colour spelled two ways.** Both sides
-  widen to six hex digits rather than making the parser carry a distinction a
-  renderer has no use for.
+- **`` `F00f `` and `` `FTff0000 `` are one colour spelled two ways.**
 
 ## Not compared yet
 

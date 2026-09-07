@@ -63,36 +63,42 @@ Recorded because they are the reason this file exists, not as trivia.
   renderer's problem, and on a two-ink panel it is still an open design
   question here.
 
-## Measured deviations from the reference
+## Parity with the reference
 
-Both are found by `parity/run_parity.sh`, which diffs this parser against
-NomadNet's own over a corpus. **The harness is red on exactly these two and
-nothing else**, which is the point: a deviation you can name and reproduce is a
-decision, and one you cannot is a bug you have not found yet.
+`parity/run_parity.sh` diffs this parser against NomadNet's own over a corpus,
+span for span. **It passes on every compared event**, and it is a blocking CI
+job, so a divergence breaks the build rather than being noted somewhere.
 
-### Headings carry no colour here
+Two things it settled, both of which changed this parser:
 
-The reference gives headings colours from the active theme, `222222` on
-`bbbbbb` at depth one and `111111` on `999999` at depth two. This parser reports
-`default` for both.
+**Colour digits are consumed, never validated.** `` `F `` takes the next three
+characters whatever they are and `` `FT `` takes six, and the reference does no
+hex check at all (`MicronParser.py:617-638`). This parser used to validate and
+skip, which left `zz` sitting in the sentence where NomadNet showed none. That
+is a difference a reader sees, so consumption now matches exactly. The colour is
+reported as **set but not valid** rather than as absent, which is a distinction
+a renderer needs: "the page asked for nonsense" is not "the page asked for
+nothing".
 
-Those colours come from the **theme**, not from the page. Colour is reported and
-never resolved here, and a theme is the clearest case of resolution there is.
-A renderer that wants NomadNet's heading palette applies it from `depth`, which
-is in the style it already receives.
+**A line that produces no row is not a line.** `` `Fzzq `` is entirely consumed,
+so the reference renders nothing and neither do we. `onLineEnd` fires only when
+a row was actually produced, which is what keeps page height identical.
 
-### Malformed colour is rejected, not consumed
+### Where the renderer has to finish the job
 
-`` `Fzz `` is not valid. The reference does not check: it takes three characters
-whatever they are, doubles each, and sets the foreground to `zzzz  `. **That
-garbage colour then persists onto every following line**, because the parse
-state carries it forward. This parser validates the digits, treats the sequence
-as text, and leaves colour alone.
+**Heading colour comes from a theme, and this parser has no theme.** The
+reference paints depth one `222` on `bbb`, depth two `111` on `999`, depth three
+`000` on `777`, from `STYLES_DARK`. Colour is reported here and never resolved,
+so `Style` carries `depth` and a `heading` flag and the renderer applies its own
+palette.
 
-That is a deliberate choice and it follows the rule above it: a page with a typo
-should lose its formatting, never its content, and one typo should not recolour
-the rest of the page. **Worth reporting upstream**, since the persistence looks
-like a bug rather than a decision.
+That is not an untested gap. `parity/ours_dump.cpp` applies NomadNet's dark
+palette from `depth` and `heading` and the diff passes, which demonstrates the
+two fields carry everything needed to reproduce the reference exactly. Get depth
+wrong and parity goes red.
+
+There is no `heading4` upstream, so behaviour past depth three is undefined
+there and not compared here.
 
 ## Not implemented
 

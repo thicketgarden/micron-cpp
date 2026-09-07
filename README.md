@@ -47,18 +47,21 @@ descriptions get wrong. It's the single source; nothing restates it.
 
 Two test layers, and the difference matters:
 
-- **`test/`, 36 unit tests, blocking.** Hand-written expectations. They prove
-  the parser matches *our reading* of the grammar.
-- **`parity/`, advisory.** Runs **NomadNet's own parser** over a corpus and
-  diffs it against ours, span for span. This is what catches a misreading,
-  because a hand-written expectation encodes the same misreading it is meant to
-  detect.
+- **`test/`, 38 unit tests.** Hand-written expectations. They prove the parser
+  matches *our reading* of the grammar.
+- **`parity/`.** Runs **NomadNet's own parser** over a corpus and diffs it
+  against ours, span for span. This is what catches a misreading, because a
+  hand-written expectation encodes the same misreading it is meant to detect.
 
-The parity job is **allowed to be red**, and today it is red on exactly two
-things, both written up in `MICRON.md`: headings take colour from the theme in
-the reference and none here, and malformed colour digits are consumed there and
-rejected here. A deviation you can name and reproduce is a decision. Run it
-before every release and read the diff.
+**Both block CI, and parity passes on every compared event.** It earned its keep
+immediately: the parser used to validate colour digits and the reference does
+not, so `` `Fzz `` left two characters sitting in the sentence where NomadNet
+showed none. A unit test asserted that behaviour, which is exactly the failure a
+hand-written expectation cannot catch on its own.
+
+Heading colour comes from a theme, and this parser has none. `Style` carries
+`depth` and a `heading` flag instead, and the harness applies NomadNet's own
+palette from those two fields to show they are sufficient.
 
 The parser also compiles with a bare `c++ -std=c++17 -c src/Micron.cpp` in CI.
 If that job ever needs a framework or a board, the dependency claim on this page

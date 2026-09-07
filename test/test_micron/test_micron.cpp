@@ -28,8 +28,8 @@ public:
         if (s.bold)      e += "+b";
         if (s.italic)    e += "+i";
         if (s.underline) e += "+u";
-        if (!s.fg.is_default) e += "+fg" + hex(s.fg.rgb);
-        if (!s.bg.is_default) e += "+bg" + hex(s.bg.rgb);
+        if (!s.fg.is_default) e += "+fg" + (s.fg.is_valid ? hex(s.fg.rgb) : std::string("INVALID"));
+        if (!s.bg.is_default) e += "+bg" + (s.bg.is_valid ? hex(s.bg.rgb) : std::string("INVALID"));
         if (s.align == Align::Center) e += "+center";
         if (s.align == Align::Right)  e += "+right";
         if (s.depth) e += "+d" + std::to_string(s.depth);
@@ -126,9 +126,32 @@ void test_background_and_reset(void) {
     TEST_ASSERT_EQUAL_STRING("TEXT[a]+bg00ff00 TEXT[b] EOL", run("`B0f0a`bb").c_str());
 }
 
-void test_malformed_colour_is_dropped_not_printed(void) {
-    // "zz" isn't hex; the command is consumed and no colour applied.
-    TEST_ASSERT_EQUAL_STRING("TEXT[zzq] EOL", run("`Fzzq").c_str());
+void test_malformed_colour_consumes_its_digits(void) {
+    // This test asserted TEXT[zzq] until the parity harness ran NomadNet's own
+    // parser over the same input and disproved it. The reference does not
+    // validate colour digits: it takes the next three characters whatever they
+    // are (MicronParser.py:617-638), so nothing is left to print and the line
+    // renders no row at all. Verified against nomadnet 1.4.0, which reports
+    // fg='zzq' and no widget.
+    //
+    // A hand-written expectation encoding our own misreading is exactly what
+    // parity/ exists to catch, and this is the one it caught.
+    TEST_ASSERT_EQUAL_STRING("", run("`Fzzq").c_str());
+}
+
+void test_malformed_colour_keeps_the_words_after_it(void) {
+    // Three characters are consumed whatever they are, here "zzi", so the text
+    // resumes at "nvalid". Validating instead used to leave them in the
+    // sentence where NomadNet shows none, which is a difference a reader sees.
+    // The colour is reported as set-but-invalid rather than as absent, so a
+    // renderer can tell "asked for nonsense" from "asked for nothing".
+    TEST_ASSERT_EQUAL_STRING("TEXT[nvalid]+fgINVALID EOL", run("`Fzzinvalid").c_str());
+}
+
+void test_colour_command_too_short_does_nothing(void) {
+    // Fewer than three characters after the command and the reference does not
+    // consume them, so they stay text and the colour is untouched.
+    TEST_ASSERT_EQUAL_STRING("TEXT[00] EOL", run("`F00").c_str());
 }
 
 // --- links ------------------------------------------------------------------
@@ -281,7 +304,9 @@ int main(int, char**) {
     RUN_TEST(test_short_colour_doubles_nibbles);
     RUN_TEST(test_true_colour_form);
     RUN_TEST(test_background_and_reset);
-    RUN_TEST(test_malformed_colour_is_dropped_not_printed);
+    RUN_TEST(test_malformed_colour_consumes_its_digits);
+    RUN_TEST(test_malformed_colour_keeps_the_words_after_it);
+    RUN_TEST(test_colour_command_too_short_does_nothing);
     RUN_TEST(test_link_with_label);
     RUN_TEST(test_link_without_label_uses_target);
     RUN_TEST(test_text_around_link);

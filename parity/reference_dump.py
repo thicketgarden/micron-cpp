@@ -95,8 +95,13 @@ def _color(value, default):
     if value is None or value == default:
         return "default"
     v = str(value)
+    # Micron does not validate colour digits, so the reference happily stores
+    # non-hex here. That is not a colour, and calling it one would be a lie in
+    # both directions: report it as invalid, which is what our parser reports.
+    if not all(ch in "0123456789abcdefABCDEF" for ch in v):
+        return "invalid"
     if len(v) == 3:
-        v = "".join(c * 2 for c in v)
+        v = "".join(ch * 2 for ch in v)
     return v.lower()
 
 

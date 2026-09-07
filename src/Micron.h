@@ -55,9 +55,17 @@ enum class Align : uint8_t { Left, Center, Right };
 struct Color {
     uint32_t rgb = 0;          // 0xRRGGBB
     bool     is_default = true;
+    // The page asked for a colour and it wasn't one. Micron doesn't validate
+    // its colour digits, so `Fzz is legal syntax carrying nonsense, and a
+    // renderer needs to be able to tell that apart from "no colour asked for".
+    // rgb is meaningless when this is true.
+    bool     is_valid = true;
 
     bool operator==(const Color& o) const {
-        return is_default == o.is_default && (is_default || rgb == o.rgb);
+        if (is_default != o.is_default) return false;
+        if (is_default) return true;
+        if (is_valid != o.is_valid) return false;
+        return !is_valid || rgb == o.rgb;
     }
     bool operator!=(const Color& o) const { return !(*this == o); }
 };
@@ -70,12 +78,15 @@ struct Style {
     Color bg;
     Align align     = Align::Left;
     uint8_t depth   = 0;       // section depth; indent is depth * SECTION_INDENT
+    bool  heading   = false;   // THIS line is the heading, not content beneath
+                               // it. Both carry the same depth, and only the
+                               // heading takes a heading style.
     bool  literal   = false;   // inside a `= block: emit verbatim, no markup
 
     bool operator==(const Style& o) const {
         return bold == o.bold && italic == o.italic && underline == o.underline
             && fg == o.fg && bg == o.bg && align == o.align
-            && depth == o.depth && literal == o.literal;
+            && depth == o.depth && heading == o.heading && literal == o.literal;
     }
 };
 
@@ -145,8 +156,10 @@ private:
     Style _style;
 
     // Inline markup pass. `pre_escape` means the line began with a backslash,
-    // so its first character is literal.
-    void emitInline(const char* line, size_t len, Renderer& out, bool pre_escape);
+    // so its first character is literal. Returns true if it emitted anything,
+    // which is what decides whether the line becomes a row: a line holding only
+    // markup, like a lone colour command, renders nothing in the reference.
+    bool emitInline(const char* line, size_t len, Renderer& out, bool pre_escape);
 };
 
 } // namespace micron

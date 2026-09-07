@@ -22,8 +22,23 @@
 
 using namespace micron;
 
+// NomadNet's dark-theme heading palette, STYLES_DARK in MicronParser.py.
+// Applying it here is a RENDERER step, done deliberately: this parser reports
+// depth and never resolves a theme, and the point of doing it in the dumper is
+// to prove that `depth` plus `heading` carries everything needed to reproduce
+// the reference's output. Get depth wrong and these stop matching.
+static bool heading_palette(uint8_t depth, uint32_t& fg, uint32_t& bg) {
+    switch (depth) {
+        case 1: fg = 0x222222; bg = 0xbbbbbb; return true;
+        case 2: fg = 0x111111; bg = 0x999999; return true;
+        case 3: fg = 0x000000; bg = 0x777777; return true;
+        default: return false;   // no heading4 upstream; behaviour undefined
+    }
+}
+
 static std::string color(const Color& c) {
     if (c.is_default) return "default";
+    if (!c.is_valid) return "invalid";
     // Always six hex digits. `F00f and `FTff0000 are the same colour spelled
     // two ways, and the reference dumper widens its side to match.
     char buf[8];
@@ -39,9 +54,17 @@ class Dumper : public Renderer {
 public:
     void onText(const char* t, size_t n, const Style& s) override {
         if (n == 0) return;
+        std::string fg = color(s.fg), bg = color(s.bg);
+        uint32_t hfg, hbg;
+        if (s.heading && heading_palette(s.depth, hfg, hbg)) {
+            // The page can still override a heading's colour inline, so the
+            // theme only fills in what the page left alone.
+            if (s.fg.is_default) { char b[8]; std::snprintf(b, sizeof b, "%06x", hfg); fg = b; }
+            if (s.bg.is_default) { char b[8]; std::snprintf(b, sizeof b, "%06x", hbg); bg = b; }
+        }
         std::printf("TEXT|%c%c%c|%s|%s|%s|%u|%s|%.*s\n",
                     s.bold ? 'b' : '-', s.italic ? 'i' : '-', s.underline ? 'u' : '-',
-                    color(s.fg).c_str(), color(s.bg).c_str(), align_name(s.align),
+                    fg.c_str(), bg.c_str(), align_name(s.align),
                     (unsigned)s.depth, s.literal ? "lit" : "-", (int)n, t);
     }
     // The reference routes a link's label around make_part, so links cannot be
