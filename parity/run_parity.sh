@@ -14,6 +14,13 @@
 # automatically our bug: the reference is the grammar of record, so the fix is
 # either our parser or a documented deviation in MICRON.md, never a silent
 # adjustment of the expected output.
+#
+# A green diff is not the goal, an accurate one is. Before trusting one, check
+# that each side measures what it claims: that a row marker means a row the
+# reference produced, that a file ending in a newline has not grown a trailing
+# blank line, that two spellings of one colour are not compared as strings. A
+# harness wrong in the direction of agreement is worse than no harness, because
+# it launders its own artifacts into the code under test.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"

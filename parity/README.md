@@ -25,11 +25,8 @@ change what parity means without anyone touching this parser.
 does not affect the dump, so pinning it would be a constraint that buys nothing
 and rots.
 
-⚠ **A reference error is a harness fault, not a finding.** When
-`reference_dump.py` reports an exception attributed to the reference, suspect
-this file before suspecting NomadNet or a dependency. The parse state holds
-urwid widgets, so anything that copies it or asks it for a boolean raises from
-inside urwid and reads as the reference being broken. Measure before pinning.
+If `reference_dump.py` ever reports a `REFERENCE_ERROR`, read the note beside
+that handler before blaming NomadNet or a dependency.
 
 ## Two corpora
 
@@ -69,21 +66,6 @@ of record. A difference is resolved by changing this parser, or by writing a
 deviation into `MICRON.md` and excluding it deliberately, and by nothing else.
 Reaching green here meant changing the parser twice and correcting a unit test
 the reference disproved.
-
-### Two rules for working on this
-
-**A harness that is wrong in the direction of agreement is worse than no
-harness.** It launders its own artifacts into the code under test. Before
-trusting a green run, check that each side is measuring the thing it claims:
-that a row marker means a row the reference actually produced, that a file
-ending in a newline has not grown a trailing blank line, and that two spellings
-of one colour are not being compared as strings.
-
-**A green diff is not the goal; an accurate one is.** If closing a difference
-requires touching the expected output, the change is wrong.
-
-**A dependency is not guilty until measured.** Run the dump across the versions
-in question and compare hashes. A pin added on a hunch outlives the hunch.
 
 ## Not compared yet
 

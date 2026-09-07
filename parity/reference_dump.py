@@ -168,6 +168,12 @@ def dump(path, out):
             # is enough and nothing about parsing changes.
             widgets = M.parse_line(line, state, _URL_DELEGATE)
         except Exception as e:                       # noqa: BLE001
+            # SUSPECT THIS FILE FIRST. The parse state holds urwid widgets, so
+            # anything here that copies it or asks it for a boolean raises from
+            # inside urwid and reads as the reference being broken. A reference
+            # error is a harness fault until proven otherwise, and it is not a
+            # reason to pin a dependency: measure across versions and compare
+            # hashes instead. A pin added on a hunch outlives the hunch.
             print(f"REFERENCE_ERROR|{lineno}|{type(e).__name__}: {e}", file=out)
             continue
 
