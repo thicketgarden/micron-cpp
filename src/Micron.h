@@ -128,8 +128,15 @@ struct Table {
 struct Field {
     const char* name     = nullptr;  // NOT null-terminated; use name_len
     size_t      name_len = 0;
-    const char* value    = nullptr;  // preset value / label text
+    // A TEXT field's value is its preset content, and it has no label.
+    // A CHECKBOX or RADIO carries both, and they are different things: the
+    // value is what gets submitted, the label is what a reader sees beside the
+    // box (MicronParser.py, "for checkboxes and radios, field_data is the
+    // label"). Conflating them puts the submitted value on screen.
+    const char* value    = nullptr;
     size_t      value_len = 0;
+    const char* label     = nullptr;
+    size_t      label_len = 0;
     uint8_t     width    = DEFAULT_FIELD_WIDTH;
     FieldKind   kind     = FieldKind::Text;
     bool        masked   = false;    // render as asterisks

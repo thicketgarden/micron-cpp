@@ -19,6 +19,15 @@ bool isNameChar(char c) {
         || (c >= '0' && c <= '9') || c == '_' || c == '-';
 }
 
+// One codepoint from a known-length UTF-8 sequence.
+uint32_t decodeUtf8(const char* p, uint8_t len) {
+    const unsigned char c = (unsigned char)p[0];
+    if (len == 1) return c;
+    uint32_t cp = len == 2 ? (c & 0x1Fu) : len == 3 ? (c & 0x0Fu) : (c & 0x07u);
+    for (uint8_t k = 1; k < len; k++) cp = (cp << 6) | ((unsigned char)p[k] & 0x3Fu);
+    return cp;
+}
+
 int hexVal(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -272,9 +281,18 @@ void Parser::parseLine(const char* line, size_t len, Renderer& out) {
 
         if (first == '-') {
             uint32_t ch = BOX_DRAWINGS_LIGHT_HORIZONTAL;
-            // "-x" sets the fill character. Control characters are rejected
-            // because they crash upstream's renderer.
-            if (len == 2 && (unsigned char)line[1] >= 32) ch = (unsigned char)line[1];
+            // "-x" sets the fill character. The reference tests len(line) == 2
+            // on DECODED text, so the fill may be any single codepoint and a
+            // byte-length test rejects every multi-byte one: "-\u2501" is two
+            // characters there and four bytes here. Control characters are
+            // rejected because they crash upstream's renderer.
+            if (len >= 2) {
+                const uint8_t seq = (uint8_t)(1 + utf8Continuation(line + 2, len - 2));
+                if (len == (size_t)(1 + seq)) {
+                    const uint32_t cp = decodeUtf8(line + 1, seq);
+                    if (cp >= 32) ch = cp;
+                }
+            }
             out.onDivider(ch, _style);
             // A divider IS a row. The reference returns a widget for it, so it
             // occupies a line and the page is one taller. Same rule as
@@ -465,10 +483,35 @@ bool Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
                 for (size_t k = 0; k < bar; k++) {
                     if (head[k] >= '0' && head[k] <= '9') { parseUInt(head + k, bar - k, f.width); break; }
                 }
-                f.name = head + bar + 1; f.name_len = head_len - bar - 1;
+                // Everything after the flags splits on '|' as well:
+                // flags|name|value|prechecked (MicronParser.py:966-1000). Only
+                // the flags were being read, so a checkbox came out named
+                // "checkbox|1|*" and could never be pre-checked.
+                const char* rest = head + bar + 1;
+                size_t rest_len = head_len - bar - 1;
+                size_t b2 = rest_len, b3 = rest_len;
+                for (size_t k = 0; k < rest_len; k++)
+                    if (rest[k] == '|') { b2 = k; break; }
+                for (size_t k = b2 + 1; k < rest_len; k++)
+                    if (rest[k] == '|') { b3 = k; break; }
+
+                f.name = rest; f.name_len = b2;
+                if (b2 < rest_len) {
+                    // A checkbox or radio carries its submitted value here; a
+                    // text field carries its default after the backtick.
+                    f.value = rest + b2 + 1;
+                    f.value_len = (b3 < rest_len ? b3 : rest_len) - b2 - 1;
+                }
+                if (b3 < rest_len && rest_len - b3 >= 2 && rest[b3 + 1] == '*')
+                    f.prechecked = true;
             }
-            f.value = line + tick + 1;
-            f.value_len = close - tick - 1;
+            if (f.kind == FieldKind::Text) {
+                f.value = line + tick + 1;
+                f.value_len = close - tick - 1;
+            } else {
+                f.label = line + tick + 1;
+                f.label_len = close - tick - 1;
+            }
 
             out.onField(f, _style);
             emitted = true;

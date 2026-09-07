@@ -51,7 +51,10 @@ public:
                       : f.kind == FieldKind::Checkbox ? "check" : "text";
         events.push_back("FIELD[" + std::string(f.name, f.name_len) + "="
                          + std::string(f.value, f.value_len) + ",w" + std::to_string(f.width)
-                         + "," + k + (f.masked ? ",masked" : "") + "]");
+                         + "," + k + (f.masked ? ",masked" : "")
+                         + (f.prechecked ? ",checked" : "")
+                         + (f.label_len ? ",label=" + std::string(f.label, f.label_len) : "")
+                         + "]");
     }
     void onAnchor(const char* n, size_t len) override {
         events.push_back("ANCHOR[" + std::string(n, len) + "]");
@@ -300,6 +303,14 @@ void test_divider_default_char(void) {
     TEST_ASSERT_EQUAL_STRING("DIV[9472] EOL", run("-").c_str());   // U+2500
 }
 
+void test_divider_custom_char_may_be_multibyte(void) {
+    // The reference tests len(line) == 2 on DECODED text, so any single
+    // codepoint is a valid fill. A byte-length test rejects every multi-byte
+    // one and silently falls back to the default rule.
+    TEST_ASSERT_EQUAL_STRING("DIV[9601] EOL", run("-\u2581").c_str());
+    TEST_ASSERT_EQUAL_STRING("DIV[9473] EOL", run("-\u2501").c_str());
+}
+
 void test_divider_custom_char(void) {
     TEST_ASSERT_EQUAL_STRING("DIV[61] EOL", run("-=").c_str());    // '='
 }
@@ -343,8 +354,22 @@ void test_field_with_width_and_value(void) {
 }
 
 void test_checkbox_and_radio(void) {
-    TEST_ASSERT_EQUAL_STRING("FIELD[opt=1,w24,check] EOL", run("`<?|opt`1>").c_str());
-    TEST_ASSERT_EQUAL_STRING("FIELD[pick=a,w24,radio] EOL", run("`<^|pick`a>").c_str());
+    // A box's components are flags|name|value, and the text after the backtick
+    // is its LABEL, not its value (MicronParser.py: "for checkboxes and radios,
+    // field_data is the label"). Here there is no third component, so the value
+    // is empty and "1" is what the reader sees beside the box.
+    TEST_ASSERT_EQUAL_STRING("FIELD[opt=,w24,check,label=1] EOL", run("`<?|opt`1>").c_str());
+    TEST_ASSERT_EQUAL_STRING("FIELD[col=,w24,radio,label=Red] EOL", run("`<^|col`Red>").c_str());
+}
+
+void test_checkbox_value_and_prechecked(void) {
+    // flags|name|value|* . The trailing * is what makes it default-checked, and
+    // the whole tail used to be swallowed into the name, so no box could ever
+    // report itself checked.
+    TEST_ASSERT_EQUAL_STRING("FIELD[agree=1,w24,check,checked,label=Yes] EOL",
+                             run("`<?|agree|1|*`Yes>").c_str());
+    TEST_ASSERT_EQUAL_STRING("FIELD[agree=1,w24,check,label=Yes] EOL",
+                             run("`<?|agree|1`Yes>").c_str());
 }
 
 void test_masked_field(void) {
@@ -426,6 +451,7 @@ int main(int, char**) {
     RUN_TEST(test_depth_persists_then_resets);
     RUN_TEST(test_divider_default_char);
     RUN_TEST(test_divider_custom_char);
+    RUN_TEST(test_divider_custom_char_may_be_multibyte);
     RUN_TEST(test_literal_block_passes_markup_through);
     RUN_TEST(test_literal_block_closes);
     RUN_TEST(test_escaped_backtick_is_literal);
@@ -434,6 +460,7 @@ int main(int, char**) {
     RUN_TEST(test_simple_field);
     RUN_TEST(test_field_with_width_and_value);
     RUN_TEST(test_checkbox_and_radio);
+    RUN_TEST(test_checkbox_value_and_prechecked);
     RUN_TEST(test_masked_field);
     RUN_TEST(test_heading_with_field_is_sanitised);
     RUN_TEST(test_anchor);
