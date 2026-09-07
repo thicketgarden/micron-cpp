@@ -53,11 +53,7 @@ Two test layers, and the difference matters:
   against ours, span for span. This is what catches a misreading, because a
   hand-written expectation encodes the same misreading it is meant to detect.
 
-**Both block CI, and parity passes on every compared event.** It earned its keep
-immediately: the parser used to validate colour digits and the reference does
-not, so `` `Fzz `` left two characters sitting in the sentence where NomadNet
-showed none. A unit test asserted that behaviour, which is exactly the failure a
-hand-written expectation cannot catch on its own.
+**Both block CI, and parity passes on every compared event.**
 
 Heading colour comes from a theme, and this parser has none. `Style` carries
 `depth` and a `heading` flag instead, and the harness applies NomadNet's own

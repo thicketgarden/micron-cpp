@@ -25,14 +25,12 @@
 // GRAMMAR OF RECORD
 //
 // markqvist/NomadNet, nomadnet/ui/textui/MicronParser.py. Implemented against
-// that file directly rather than against any secondhand description of the
-// format, because a careful secondhand summary of it was wrong in five places.
+// that file directly, never against a description of the format: second-hand
+// summaries of Micron get five specific details wrong.
 //
-// MICRON.md IS THE SINGLE SOURCE for the grammar, the edge cases secondhand
-// accounts get wrong, and every deliberate deviation. It is not restated here.
-// A list kept in two files is a list that drifts, and this comment is what
-// drifted: it claimed four items and named a different set from the five in
-// MICRON.md.
+// MICRON.md IS THE SINGLE SOURCE for the grammar, those five details, and what
+// the renderer is expected to finish. None of it is restated here, because a
+// list kept in two files drifts.
 //
 // NOT YET IMPLEMENTED, deliberately, each a no-op that doesn't corrupt the
 // rest of the line:  `t tables  ·  `{ partials.  MICRON.md says why.

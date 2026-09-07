@@ -1,15 +1,13 @@
 # Micron, as implemented here
 
 Reference: `markqvist/NomadNet`, `nomadnet/ui/textui/MicronParser.py` (1,048
-lines), read 2026-08-01. **That file is the grammar of record.** This document
-exists because a careful second-hand summary of it was wrong in five places,
-and every correction below is a passing test in `test/test_micron/`.
+lines). **That file is the grammar of record.** Every detail below is a passing
+test in `test/test_micron/`, and the ones marked as commonly missed are the ones
+second-hand summaries of Micron get wrong.
 
 **This file is the single source for the grammar and the edge cases.**
-`Micron.h` points here rather than restating any of it. It used to restate a
-short version, which drifted: the header claimed four commonly-missed details
-and named a different set from the five below. Nothing that appears here gets
-copied into a comment.
+`Micron.h` points here and restates none of it. Nothing on this page gets copied
+into a comment, because a list kept in two places drifts.
 
 ## Line level
 
@@ -41,16 +39,17 @@ heading status, because a heading style can't wrap an editable widget.
 | `` [label`target] `` | link; with no backtick the whole body is both label & target |
 | `<flags\|name`value>` | field. Flags: `^` radio, `?` checkbox, `!` masked, digits set width (default 24) |
 
-## The five things the summary got wrong
+## The five details second-hand summaries get wrong
 
-Recorded because they are the reason this file exists, not as trivia.
+Each one is a passing test. They are listed because getting any of them wrong
+produces a parser that looks right on ordinary pages and mangles real ones.
 
 1. `` `= `` is the **literal toggle**, not a divider.
 2. A lone backtick is a **style reset**, not the literal toggle.
 3. The **divider is `-`** at line start, with an optional fill character.
-4. **`FT` / `BT` true-colour forms exist** and were missing entirely.
-5. **Checkbox and radio widgets exist**, not just text fields. Tables and
-   anchors were omitted too.
+4. **`FT` / `BT` true-colour forms exist**, six hex digits rather than three.
+5. **Checkbox and radio widgets exist**, not just text fields. So do tables
+   and anchors.
 
 ## Deliberate deviations
 
@@ -69,20 +68,22 @@ Recorded because they are the reason this file exists, not as trivia.
 span for span. **It passes on every compared event**, and it is a blocking CI
 job, so a divergence breaks the build rather than being noted somewhere.
 
-Two things it settled, both of which changed this parser:
+Two consequences worth stating outright, because both are easy to get wrong:
 
 **Colour digits are consumed, never validated.** `` `F `` takes the next three
-characters whatever they are and `` `FT `` takes six, and the reference does no
-hex check at all (`MicronParser.py:617-638`). This parser used to validate and
-skip, which left `zz` sitting in the sentence where NomadNet showed none. That
-is a difference a reader sees, so consumption now matches exactly. The colour is
-reported as **set but not valid** rather than as absent, which is a distinction
-a renderer needs: "the page asked for nonsense" is not "the page asked for
-nothing".
+characters whatever they are and `` `FT `` takes six, with no hex check at all
+(`MicronParser.py:617-638`). Consuming the same characters is what keeps the
+text identical: validating instead leaves `zz` sitting in a sentence where
+NomadNet shows none, which is a difference a reader sees. Fewer than three
+characters follow and nothing happens at all, colour included.
+
+An unparseable triplet is reported as **set but not valid**, not as absent. A
+renderer needs that distinction: "the page asked for nonsense" is not "the page
+asked for nothing".
 
 **A line that produces no row is not a line.** `` `Fzzq `` is entirely consumed,
-so the reference renders nothing and neither do we. `onLineEnd` fires only when
-a row was actually produced, which is what keeps page height identical.
+so nothing renders. `onLineEnd` fires only when a row was actually produced,
+which is what keeps page height, and therefore scroll position, identical.
 
 ### Where the renderer has to finish the job
 
