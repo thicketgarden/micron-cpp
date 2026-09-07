@@ -91,13 +91,19 @@ public:
         std::string fg = color(s.fg, true), bg = color(s.bg);
         uint32_t hfg, hbg;
         if (s.heading && heading_palette(s.depth, hfg, hbg)) {
-            // The heading style REPLACES the current colours rather than
-            // filling in unset ones. The reference applies it with
-            // style_to_state, which overwrites, so a page that sets a colour
-            // just before a heading does not carry it into the heading.
+            // The heading style is the BASE, not an override. The reference
+            // applies it with style_to_state and THEN processes the line's
+            // inline commands, so a colour the page sets inside a heading wins.
+            // Overriding unconditionally collapsed a two-colour heading into
+            // one run, which a live page found: rngit writes an auth label in
+            // green inside a section heading.
+            //
+            // The leak this once guarded against, a colour set before a heading
+            // carrying into it, is handled by the parser: it reports default at
+            // the start of a heading line.
             char b[8];
-            std::snprintf(b, sizeof b, "%06x", hfg); fg = b;
-            std::snprintf(b, sizeof b, "%06x", hbg); bg = b;
+            if (s.fg.is_default) { std::snprintf(b, sizeof b, "%06x", hfg); fg = b; }
+            if (s.bg.is_default) { std::snprintf(b, sizeof b, "%06x", hbg); bg = b; }
         }
         char flags[4] = { s.bold ? 'b' : '-', s.italic ? 'i' : '-', s.underline ? 'u' : '-', 0 };
         std::string key = std::string(flags) + "|" + fg + "|" + bg + "|" + align_name(s.align)

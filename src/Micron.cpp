@@ -274,7 +274,25 @@ void Parser::parseLine(const char* line, size_t len, Renderer& out) {
             // heading carries the same depth and is not a heading, and the
             // reference styles only the heading itself.
             _style.heading = true;
+
+            // THE HEADING LATCH. The reference saves the current style, applies
+            // the heading style over it, renders the line, then restores what it
+            // saved (state_to_style / style_to_state around make_output). So a
+            // colour the page set earlier does NOT bleed into a heading, and it
+            // resumes on the line after.
+            //
+            // This parser resolves no theme, so "the heading style" is reported
+            // as DEFAULT colour: the renderer supplies whatever a heading looks
+            // like on its display. A colour set INSIDE the heading line still
+            // overrides, because that happens after the latch.
+            const Color latched_fg = _style.fg, latched_bg = _style.bg;
+            _style.fg = Color{};
+            _style.bg = Color{};
+
             if (emitInline(line, len, out, false)) out.onLineEnd(_style);
+
+            _style.fg = latched_fg;
+            _style.bg = latched_bg;
             _style.heading = false;
             return;
         }
