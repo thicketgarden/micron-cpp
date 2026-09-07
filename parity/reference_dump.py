@@ -83,6 +83,19 @@ _parts = []
 _links = []
 _orig_make_part = M.make_part
 _orig_make_output = M.make_output
+_orig_render_table = M.render_table
+_tables = []
+
+
+def _spy_render_table(lines, state, url_delegate):
+    """The reference's own table input, captured before it is laid out.
+
+    render_table receives the buffered rows verbatim along with the alignment
+    and width the opening `t declared, which is exactly what the C++ parser
+    reports. What it produces from them is box-drawing text for a terminal and
+    is not compared."""
+    _tables.append((list(lines), state.get("table_align"), state.get("table_maxwidth")))
+    return _orig_render_table(lines, state, url_delegate)
 
 
 # Snapshot ONLY the style fields, never the whole state. The parse state holds
@@ -124,6 +137,43 @@ def _spy_make_output(state, line, url_delegate, pre_escape=False):
 
 M.make_part = _spy_make_part
 M.make_output = _spy_make_output
+M.render_table = _spy_render_table
+
+
+def _unwrap(widgets):
+    """parse_image pads its widget when depth > 0, keeping the original."""
+    if not widgets:
+        return None
+    w = widgets[0]
+    return getattr(w, "_contained_image", w)
+
+
+def _emit_image(widgets, out):
+    w = _unwrap(widgets)
+    if w is None or not hasattr(w, "image_url"):
+        return
+    def prop(name):
+        v = getattr(w, name, None)
+        return "" if v is None else str(v)
+    align = getattr(w, "align", None)
+    print("IMAGE|{}|{}|{}|{}|{}".format(
+        getattr(w, "image_alt", "") or "", getattr(w, "image_url", "") or "",
+        prop("width"), prop("height"), align if align else "-"), file=out)
+
+
+def _emit_partial(widgets, out):
+    w = _unwrap(widgets)
+    if w is None or not hasattr(w, "partial_url"):
+        return
+    refresh = getattr(w, "partial_refresh", None)
+    # Stored as a float, and the reference discards anything under a second.
+    refresh = "" if refresh is None else (str(int(refresh)) if float(refresh).is_integer() else str(refresh))
+    fields = getattr(w, "partial_fields", None) or []
+    if isinstance(fields, str):
+        fields = [fields]
+    print("PARTIAL|{}|{}|{}".format(
+        getattr(w, "partial_url", "") or "", refresh,
+        "|".join(f for f in fields if f)), file=out)
 
 
 def _color(value, default):
@@ -185,12 +235,26 @@ def dump(path, out):
         # assert the parsed fields instead.
         now_table = state.get("table_mode", False)
         if was_table or now_table:
-            # A table's own lines, and the closing `t that emits the whole
-            # rendered table at once.
+            # A table's rows are reported, its LAYOUT is not: the reference
+            # turns them into box-drawing text at a fixed width, which is a
+            # rendering decision the C++ parser deliberately does not make.
+            for rows, align, maxw in _tables:
+                print("TABLE_BEGIN|{}|{}".format(
+                    {"l": "left", "c": "center", "r": "right"}.get(align, "-"),
+                    maxw if maxw else 0), file=out)
+                for r in rows:
+                    print(f"TABLE_ROW|{r}", file=out)
+                print("TABLE_END", file=out)
+            _tables.clear()
             continue
+
         # Only outside a literal block. Inside one these are plain text, and
         # the reference's own dispatch for them sits under `if not literal`.
-        if not was_literal and (line.startswith("`(") or line.startswith("`{")):
+        if not was_literal and line.startswith("`("):
+            _emit_image(widgets, out)
+            continue
+        if not was_literal and line.startswith("`{"):
+            _emit_partial(widgets, out)
             continue
 
         # Merge adjacent runs in the same style, symmetrically with the C++

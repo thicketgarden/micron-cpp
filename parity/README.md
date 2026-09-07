@@ -67,12 +67,26 @@ deviation into `MICRON.md` and excluding it deliberately, and by nothing else.
 Reaching green here meant changing the parser twice and correcting a unit test
 the reference disproved.
 
-## Not compared yet
+## Compared
 
-Dividers, fields and anchors. The reference returns those as urwid widgets from
-`parse_line` rather than through `make_part`, so the dumper can't see them. Our
-side emits them with a `SKIP_` prefix and the differ drops those lines on both
-sides, so the gap is visible in the dump instead of silently passing.
+Text with full style, links with labels, targets and fields, table alignment,
+width and rows, image alt text, URL, dimensions and alignment, and partial URL,
+refresh and fields. All against the reference's own parsed values, taken off the
+widgets and state it produces rather than re-derived.
+
+**Not compared:** dividers, fields and anchors. The reference returns those as
+urwid widgets from `parse_line` rather than through `make_part`, so the dumper
+cannot see them. Our side emits them with a `SKIP_` prefix and the differ drops
+those lines on both sides, so the gap is visible in the dump instead of quietly
+passing.
+
+**Table layout is not compared either**, only the rows going in. The reference
+converts them to box-drawing text at a fixed width; this parser reports the rows
+and lets the renderer lay them out.
+
+⚠ **Image alignment is compared as ImageWidget's glyph**, because that is all
+the reference exposes: unset and `a=c` both become `|`, so the two are
+indistinguishable there. The unit tests carry that distinction instead.
 
 ## The corpus
 

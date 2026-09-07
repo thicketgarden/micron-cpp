@@ -133,10 +133,13 @@ microcontroller to enforce it here would be the wrong place.
 
 ### What this means for parity
 
-The full-corpus run excludes these three constructs on both sides, because
-there is no rendered text to compare against a reference that renders. Their
-parsed fields are asserted by unit tests read off nomadnet 1.4.0 instead.
-**Everything else matches: 82 real pages, zero differences.**
+The full-corpus run compares all three against the reference's **own parsed
+values**, lifted from the widgets and state it produces: table alignment, width
+and rows; image alt text, URL and dimensions; partial URL, refresh and fields.
+Only table *layout* is excluded, because the reference converts rows to
+box-drawing text and this parser reports rows.
+
+**97 real pages, zero differences.**
 
 ## Reading the reference
 

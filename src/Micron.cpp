@@ -73,6 +73,24 @@ size_t bodyEnd(const char* line, size_t len, char close) {
 }
 } // namespace
 
+namespace {
+// Bytes following the lead byte of one UTF-8 sequence. Returns 0 for ASCII and
+// for anything malformed, so a bad byte is consumed alone rather than eating
+// the rest of the line.
+size_t utf8Continuation(const char* p, size_t avail) {
+    if (avail == 0) return 0;
+    const unsigned char c = (unsigned char)p[-1];
+    size_t want = (c & 0xE0u) == 0xC0u ? 1
+                : (c & 0xF0u) == 0xE0u ? 2
+                : (c & 0xF8u) == 0xF0u ? 3 : 0;
+    if (want > avail) return 0;
+    for (size_t k = 0; k < want; k++) {
+        if (((unsigned char)p[k] & 0xC0u) != 0x80u) return 0;   // not a continuation
+    }
+    return want;
+}
+} // namespace
+
 void Parser::emitDelimited(const char* line, size_t len, char close,
                            Renderer& out, bool image) {
     const size_t end = bodyEnd(line, len, close);
@@ -104,10 +122,14 @@ void Parser::emitDelimited(const char* line, size_t len, char close,
             const char* val = pr + eq + 1; size_t vl = pl - eq - 1;
             if      (key == 'w') { img.width = val;  img.width_len = vl; }
             else if (key == 'h') { img.height = val; img.height_len = vl; }
-            else if (key == 'a' && vl > 0) {
-                img.align = val[0] == 'c' ? Align::Center
-                          : val[0] == 'r' ? Align::Right : Align::Left;
-                img.align_set = true;
+            else if (key == 'a' && vl == 1) {
+                // Exactly l, c or r. The reference maps only those three to a
+                // real alignment; anything else reaches the widget unmapped,
+                // raises, and leaves the default. So an unknown value is not a
+                // left alignment, it is no alignment at all.
+                if      (val[0] == 'l') { img.align = Align::Left;   img.align_set = true; }
+                else if (val[0] == 'c') { img.align = Align::Center; img.align_set = true; }
+                else if (val[0] == 'r') { img.align = Align::Right;  img.align_set = true; }
             }
         }
         if (img.url_len > 0) { out.onImage(img, _style); out.onLineEnd(_style); }
@@ -455,8 +477,12 @@ bool Parser::emitInline(const char* line, size_t len, Renderer& out, bool pre_es
         }
 
         default:
-            // Unknown command. Consume it so stray backticks don't leak into
-            // the text, which is what upstream effectively does.
+            // Unknown command. Consume the whole CHARACTER, not one byte: the
+            // reference works on decoded text, so a backtick before a
+            // multi-byte glyph swallows the glyph. Consuming a single byte
+            // leaves the continuation bytes behind and emits a truncated
+            // sequence, which real pages produce with runs like `F0df`\u2588.
+            consumed = 1 + utf8Continuation(line + i + 1, len - i - 1);
             break;
         }
 

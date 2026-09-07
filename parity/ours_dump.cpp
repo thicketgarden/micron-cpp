@@ -13,6 +13,7 @@
 // Reticulum or display dependency.
 
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 #include <fstream>
@@ -57,6 +58,13 @@ static std::string color(const Color& c, bool is_fg = false) {
     char buf[8];
     std::snprintf(buf, sizeof buf, "%06x", c.rgb & 0xffffff);
     return buf;
+}
+
+static std::string strip(const char* s, size_t n) {
+    size_t a = 0, b = n;
+    while (a < b && (s[a] == ' ' || s[a] == '\t')) a++;
+    while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t')) b--;
+    return std::string(s + a, b - a);
 }
 
 static const char* align_name(Align a) {
@@ -127,26 +135,46 @@ public:
     // comparison; the unit tests assert their fields instead.
     void onTableBegin(const Table& t, const Style&) override {
         in_table = true;
-        std::printf("SKIP_TABLE_BEGIN|%s|%u\n",
+        std::printf("TABLE_BEGIN|%s|%u\n",
                     t.align_set ? align_name(t.align) : "-",
                     t.max_width_set ? (unsigned)t.max_width : 0u);
     }
     void onTableRow(const char* r, size_t n, const Style&) override {
-        std::printf("SKIP_TABLE_ROW|%.*s\n", (int)n, r);
+        std::printf("TABLE_ROW|%.*s\n", (int)n, r);
     }
-    void onTableEnd(const Style&) override { in_table = false; std::printf("SKIP_TABLE_END\n"); }
+    void onTableEnd(const Style&) override { in_table = false; std::printf("TABLE_END\n"); }
+
     void onImage(const Image& i, const Style&) override {
         in_media = true;
-        std::printf("SKIP_IMAGE|%.*s|%.*s|%.*s|%.*s|%s\n",
-                    (int)i.alt_len, i.alt ? i.alt : "", (int)i.url_len, i.url ? i.url : "",
-                    (int)i.width_len, i.width ? i.width : "", (int)i.height_len, i.height ? i.height : "",
-                    i.align_set ? align_name(i.align) : "-");
+        // The reference strips alt and url, and exposes alignment only as
+        // ImageWidget's own glyph: unset and centre are both '|', so the two
+        // are indistinguishable there and compared as one here.
+        const char* glyph = !i.align_set ? "|"
+                          : i.align == Align::Left ? "<"
+                          : i.align == Align::Right ? ">" : "|";
+        std::printf("IMAGE|%s|%s|%s|%s|%s\n",
+                    strip(i.alt, i.alt_len).c_str(), strip(i.url, i.url_len).c_str(),
+                    std::string(i.width ? i.width : "", i.width_len).c_str(),
+                    std::string(i.height ? i.height : "", i.height_len).c_str(), glyph);
     }
+
     void onPartial(const Partial& p, const Style&) override {
         in_media = true;
-        std::printf("SKIP_PARTIAL|%.*s|%.*s|%.*s\n",
-                    (int)p.url_len, p.url ? p.url : "", (int)p.refresh_len, p.refresh ? p.refresh : "",
-                    (int)p.fields_len, p.fields ? p.fields : "");
+        // Refresh is reported as written by the parser; the reference stores a
+        // float and discards anything under a second, which is the renderer's
+        // rule and is applied here to compare like with like.
+        std::string refresh(p.refresh ? p.refresh : "", p.refresh_len);
+        double secs = refresh.empty() ? 0.0 : std::strtod(refresh.c_str(), nullptr);
+        std::string rout;
+        if (secs >= 1.0) {
+            char b[32];
+            if (secs == (long long)secs) std::snprintf(b, sizeof b, "%lld", (long long)secs);
+            else                          std::snprintf(b, sizeof b, "%g", secs);
+            rout = b;
+        }
+        std::string fields(p.fields ? p.fields : "", p.fields_len);
+        std::printf("PARTIAL|%s|%s|%s\n",
+                    std::string(p.url ? p.url : "", p.url_len).c_str(), rout.c_str(), fields.c_str());
     }
     bool in_table = false, in_media = false;
     void onLineEnd(const Style&) override {

@@ -230,6 +230,20 @@ void test_partial_with_refresh_and_fields(void) {
                              run("`{/page/x.mu`10`a=1|b=2}").c_str());
 }
 
+void test_unknown_command_consumes_a_whole_character(void) {
+    // A backtick before a multi-byte glyph swallows the glyph, because the
+    // reference works on decoded text. Consuming one byte would leave the
+    // continuation bytes behind as a truncated sequence. Found on a real page
+    // with a run of `F0df`<block>`f.
+    TEST_ASSERT_EQUAL_STRING("TEXT[after] EOL", run("`\u2588after").c_str());
+}
+
+void test_malformed_utf8_after_a_backtick_consumes_one_byte(void) {
+    // A lead byte with no valid continuation is consumed alone, so one bad
+    // byte cannot eat the rest of the line.
+    TEST_ASSERT_EQUAL_STRING("TEXT[after] EOL", run("`\xE2" "after").c_str());
+}
+
 void test_partial_with_four_parts_is_dropped(void) {
     // Same rule as a link: more than three parts is not a partial at all.
     TEST_ASSERT_EQUAL_STRING("", run("`{a`b`c`d}").c_str());
@@ -400,6 +414,8 @@ int main(int, char**) {
     RUN_TEST(test_image_needs_at_least_two_parts);
     RUN_TEST(test_partial_url_only);
     RUN_TEST(test_partial_with_refresh_and_fields);
+    RUN_TEST(test_unknown_command_consumes_a_whole_character);
+    RUN_TEST(test_malformed_utf8_after_a_backtick_consumes_one_byte);
     RUN_TEST(test_partial_with_four_parts_is_dropped);
     RUN_TEST(test_table_markup_inside_a_literal_block_is_text);
     RUN_TEST(test_link_with_label);
