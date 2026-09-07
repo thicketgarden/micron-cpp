@@ -8,9 +8,11 @@ no allocation and no display assumptions.
 
 class MyRenderer : public micron::Renderer {
     void onText(const char* t, size_t n, const micron::Style& s) override {
-        // s carries bold, italic, underline, fg, bg, align, depth, literal
+        // s carries bold, italic, underline, fg, bg, align, depth, heading,
+        // literal
     }
-    // onLink, onDivider, onField, onAnchor, onLineEnd
+    // Required: onLink, onDivider, onField, onAnchor, onLineEnd
+    // Optional, default no-ops: onTableBegin/Row/End, onImage, onPartial
 };
 
 micron::Parser p;

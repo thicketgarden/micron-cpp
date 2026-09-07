@@ -1,13 +1,33 @@
 {
   "name": "micron-cpp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Streaming parser for Micron, NomadNet's page markup. Allocation-free, display-agnostic, validated against the reference parser.",
-  "keywords": ["micron", "nomadnet", "reticulum", "markup", "parser", "embedded"],
+  "keywords": [
+    "micron",
+    "nomadnet",
+    "reticulum",
+    "markup",
+    "parser",
+    "embedded"
+  ],
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "https://github.com/thicketgarden/micron-cpp.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thicketgarden/micron-cpp.git"
+  },
   "frameworks": "*",
   "platforms": "*",
   "headers": "Micron.h",
-  "export": { "include": ["src/*", "MICRON.md", "LICENSE", "README.md"] },
-  "build": { "srcDir": "src", "includeDir": "src" }
+  "export": {
+    "include": [
+      "src/*",
+      "MICRON.md",
+      "LICENSE",
+      "README.md"
+    ]
+  },
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
 }
